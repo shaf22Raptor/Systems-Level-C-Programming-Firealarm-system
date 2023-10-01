@@ -8,6 +8,14 @@
 #include <unistd.h>
 #include <string.h>
 
+int testing() {
+/*
+sdhjflhjdasf
+    szdfjadfkjasdfljkasdf
+    */
+}
+
+
 // Struct used for card reader shared memory as specified
 typedef struct {
     char scanned[16];
