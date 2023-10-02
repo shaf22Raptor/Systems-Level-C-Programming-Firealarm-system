@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <string.h>
 
+//do you see the change
+
 {testing}
 
 // Struct used for card reader shared memory as specified
