@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <string.h>
 
+// inprogess change
+
 // Struct used for card reader shared memory as specified
 typedef struct {
     char scanned[16];
