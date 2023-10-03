@@ -8,8 +8,6 @@
 #include <unistd.h>
 #include <string.h>
 
-// ronil vm push again
-
 // Struct used for card reader shared memory as specified
 typedef struct {
     char scanned[16];
