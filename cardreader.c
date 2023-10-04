@@ -7,7 +7,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
-
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#define BUFFER_SIZE 1023
 // inprogess change
 
 // Struct used for card reader shared memory as specified
@@ -35,6 +38,34 @@ int main(int argc, char **argv)
     const char *shm_path = argv[3];
     int shm_offset = argv[4];
     const char *overseer_addr = argv[5]; // temporary variable type
+
+    /*
+    Code to connect to overseer
+    */
+
+    // Initialise TCP connection to overseer
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);   // Create socket for client
+    if (sockfd == -1) { // error handling
+        perror("\nsocket()\n");
+        return 1;
+    }
+ 
+    // Define server address and port
+    struct sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(&overseer_addr);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+
+    // Establish connection
+    int connection_status = connect(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+    if (connection_status == -1) {
+        printf("Error: Connection to the server failed\n");
+        exit(1);
+    }
+    // Initialisation message to overseer
+    char helloMessage[256];
+    snprintf(helloMessage, sizeof(helloMessage), "CARDREADER %s HELLO#", id);
+    send(sockfd, helloMessage, strlen(helloMessage), 0);
 
     // initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
