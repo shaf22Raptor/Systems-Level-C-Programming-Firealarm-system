@@ -39,13 +39,13 @@ int main(int argc, char **argv)
     int shm_offset = argv[4];
     const char *overseer_addr = argv[5]; // temporary variable type
 
-    /*
+    /**************************
     Code to connect to overseer
-    */
+    **************************/
 
     // Initialise TCP connection to overseer
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);   // Create socket for client
-    if (sockfd == -1) { // error handling
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);   // Create socket for client and corresponding error handling
+    if (sockfd == -1) { 
         perror("\nsocket()\n");
         return 1;
     }
@@ -56,7 +56,7 @@ int main(int argc, char **argv)
     serverAddr.sin_port = htons(&overseer_addr);
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    // Establish connection
+    // Establish connection and corresponding error handling
     int connection_status = connect(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
     if (connection_status == -1) {
         printf("Error: Connection to the server failed\n");
@@ -66,6 +66,11 @@ int main(int argc, char **argv)
     char helloMessage[256];
     snprintf(helloMessage, sizeof(helloMessage), "CARDREADER %s HELLO#", id);
     send(sockfd, helloMessage, strlen(helloMessage), 0);
+
+
+    /*********************************************
+    Code to connect to share memory with simulator
+    *********************************************/
 
     // initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
@@ -105,6 +110,9 @@ int main(int argc, char **argv)
             char buf[17];
             memcpy(buf, shared->scanned,16);
             buf[16] = '\0';
+            // OPEN TCP CONNECTION TO SERVER
+            // SEND SCANNED DATA
+            // ACT ACCORDING TO HOW OVERSEER RESPONDS
             printf("Scanned %s\n", buf);
             shared->response = 'Y';
             pthread_cond_signal(&shared->response_cond);
@@ -115,6 +123,7 @@ int main(int argc, char **argv)
     }
     
     // close when done
+    close(sockfd);
     close(shm_fd);
 
     return 0;
