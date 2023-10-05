@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     char helloMessage[256];
     snprintf(helloMessage, sizeof(helloMessage), "CARDREADER %s HELLO#", id);
     send(sockfd, helloMessage, strlen(helloMessage), 0);
-
+    shutdown(sockfd, SHUT_RDWR);
 
     /*********************************************
     Code to connect to share memory with simulator
@@ -108,11 +108,28 @@ int main(int argc, char **argv)
     for(;;) {
         if (shared->scanned[0] != '\0') {
             char buf[17];
+            char scannedMessage[50];
             memcpy(buf, shared->scanned,16);
             buf[16] = '\0';
             // OPEN TCP CONNECTION TO SERVER
+            int connection_status = connect(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+            if (connection_status == -1) {
+                printf("Error: Connection to the server failed\n");
+                exit(1);
+            }
             // SEND SCANNED DATA
+            snprintf(scannedMessage, sizeof(scannedMessage), "CARDREADER %d SCANNED %s#", id, buf);
+            send(sockfd, scannedMessage, strlen(scannedMessage), 0);
+            shutdown(sockfd, SHUT_RDWR);
             // ACT ACCORDING TO HOW OVERSEER RESPONDS
+            /*
+            if (response == ALLOWED#) {
+                response = Y;
+            }
+            else {
+                response = N;
+            }
+            */
             printf("Scanned %s\n", buf);
             shared->response = 'Y';
             pthread_cond_signal(&shared->response_cond);
