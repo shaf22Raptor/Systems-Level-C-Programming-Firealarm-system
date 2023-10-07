@@ -120,16 +120,25 @@ int main(int argc, char **argv)
             // SEND SCANNED DATA
             snprintf(scannedMessage, sizeof(scannedMessage), "CARDREADER %d SCANNED %s#", id, buf);
             send(sockfd, scannedMessage, strlen(scannedMessage), 0);
-            shutdown(sockfd, SHUT_RDWR);
             // ACT ACCORDING TO HOW OVERSEER RESPONDS
-            /*
-            if (response == ALLOWED#) {
-                response = Y;
+
+            // Logic to recieve data
+            char receiveBuf[1024];
+            int messageReceived = recv(sockfd, receiveBuf, sizeof(receiveBuf), 0);
+            // Logic to see handle error or connection close
+            if (messageReceived == -1 || messageReceived == 0) {
+                shared->response = 'N';
             }
+            // Logic to process data from server
             else {
-                response = N;
+                receiveBuf[messageReceived] = '\0'; // Null terminate received data
+                if (receiveBuf == 'Y') {
+                    shared->response = 'Y';
+                }
+                else {
+                    shared->response = 'N';
+                }
             }
-            */
             printf("Scanned %s\n", buf);
             shared->response = 'Y';
             pthread_cond_signal(&shared->response_cond);
