@@ -10,12 +10,12 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#define BUFFER_SIZE 1023
-// inprogess change
+#define BUFFER_SIZE 16
+#define RECEIVED_BUFFER_SIZE 1024
 
 // Struct used for card reader shared memory as specified
 typedef struct {
-    char scanned[16];
+    char scanned[BUFFER_SIZE];
     pthread_mutex_t mutex;
     pthread_cond_t scanned_cond;
 
@@ -27,7 +27,7 @@ typedef struct {
 int main(int argc, char **argv) 
 {
     // see if enough arguments were supplied for this program
-    if (argc<6) {
+    if (argc!=6) {
         fprintf(stderr, "usage: {id} {wait time (in microseconds)} {shared memory path} {shared memory offset} {overseer address:port}");
         exit(1);
     }
@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     int id = atoi(argv[1]);
     int waitTime = atoi(argv[2]);
     const char *shm_path = argv[3];
-    int shm_offset = argv[4];
+    off_t shm_offset = (off_t)atoi(argv[4]);
     const char *overseer_addr = argv[5]; // temporary variable type
 
     /**************************
@@ -66,7 +66,6 @@ int main(int argc, char **argv)
     char helloMessage[256];
     snprintf(helloMessage, sizeof(helloMessage), "CARDREADER %s HELLO#", id);
     send(sockfd, helloMessage, strlen(helloMessage), 0);
-    shutdown(sockfd, SHUT_RDWR);
 
     /*********************************************
     Code to connect to share memory with simulator
@@ -107,23 +106,24 @@ int main(int argc, char **argv)
 
     for(;;) {
         if (shared->scanned[0] != '\0') {
-            char buf[17];
+            char buf[BUFFER_SIZE+1];
             char scannedMessage[50];
             memcpy(buf, shared->scanned,16);
             buf[16] = '\0';
-            // OPEN TCP CONNECTION TO SERVER
-            int connection_status = connect(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
-            if (connection_status == -1) {
-                printf("Error: Connection to the server failed\n");
-                exit(1);
-            }
+
             // SEND SCANNED DATA
-            snprintf(scannedMessage, sizeof(scannedMessage), "CARDREADER %d SCANNED %s#", id, buf);
-            send(sockfd, scannedMessage, strlen(scannedMessage), 0);
-            // ACT ACCORDING TO HOW OVERSEER RESPONDS
+            snprintf(scannedMessage, sizeof(scannedMessage), "CARDREADER %d SCANNED %s#", id, shared->scanned);
+            int sendMessage = send(sockfd, scannedMessage, strlen(scannedMessage), 0);
+            if(sendMessage == -1) {
+                perror("send()");
+            }
+
+            /*****************************************
+            ACT ACCORDING TO HOW OVERSEER RESPONDS
+            //****************************************/
 
             // Logic to recieve data
-            char receiveBuf[1024];
+            char receiveBuf[RECEIVED_BUFFER_SIZE];
             int messageReceived = recv(sockfd, receiveBuf, sizeof(receiveBuf), 0);
             // Logic to see handle error or connection close
             if (messageReceived == -1 || messageReceived == 0) {
@@ -132,7 +132,7 @@ int main(int argc, char **argv)
             // Logic to process data from server
             else {
                 receiveBuf[messageReceived] = '\0'; // Null terminate received data
-                if (receiveBuf == 'Y') {
+                if (receiveBuf[0] == 'Y') {
                     shared->response = 'Y';
                 }
                 else {
@@ -147,8 +147,34 @@ int main(int argc, char **argv)
         pthread_cond_wait(&shared->scanned_cond, &shared->mutex);
 
     }
+
+    pthread_mutex_unlock(&shared->mutex);
     
-    // close when done
+    //general cleanup with error handling
+    if (shm_unlink(shm_path) == -1) {
+        perror("shm_unlink()");
+        exit(1);
+    }   
+
+    if(pthread_mutex_destroy(&shared->mutex) !=0) {
+        perror("pthread_mutex_destroy()");
+        exit(1);
+    }
+
+    if(pthread_cond_destroy(&shared->scanned_cond) != 0) {
+        perror("pthread_cond_destroy");
+        exit(1);
+    }
+
+    if(pthread_cond_destroy(&shared->response_cond) != 0) {
+        perror("pthread_cond_destroy");
+        exit(1);
+    }
+    
+    if (munmap(shm, shm_stat.st_size) == -1) {
+        perror("munmap()");
+    }
+
     close(sockfd);
     close(shm_fd);
 
