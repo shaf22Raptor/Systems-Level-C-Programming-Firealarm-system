@@ -118,29 +118,31 @@ int main(int argc, char **argv) {
         
         else if(strcmp(buffer, "OPEN_EMERG#") == 0) {
             if(shared->status == 'O') {
-                send(client_fd, "ALREADY_OPEN#", 13, 0);
+                // Door is already open. No action is needed but it's now in emergency mode.
+                send(client_fd, "EMERGENCY_MODE#", 15, 0);
             } else {
-                send(client_fd, "EMERG_OPENING#", 14, 0);
+                // Initiate the emergency open procedure
+                send(client_fd, "EMERGENCY_OPENING#", 19, 0);
                 shared->status = 'o';
                 pthread_cond_signal(&shared->cond_start);
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
                 shared->status = 'O';
-                send(client_fd, "EMERG_OPENED#", 13, 0);
+                send(client_fd, "EMERGENCY_OPENED#", 18, 0);
             }
         } 
         
         else if(strcmp(buffer, "CLOSE_SECURE#") == 0) {
             if(shared->status == 'C') {
-                send(client_fd, "ALREADY_CLOSED#", 15, 0);
+                // Door is already closed. No action is needed but it's now in secure mode.
+                send(client_fd, "SECURE_MODE#", 13, 0);
             } else {
-                send(client_fd, "SECURE_CLOSING#", 15, 0);
-                // This is where any additional security mechanism can be implemented, for instance, wait for 5 seconds.
-                sleep(5);  // wait for 5 seconds
+                // Initiate the secure close procedure
+                send(client_fd, "SECURE_CLOSING#", 16, 0);
                 shared->status = 'c';
                 pthread_cond_signal(&shared->cond_start);
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
                 shared->status = 'C';
-                send(client_fd, "SECURE_CLOSED#", 14, 0);
+                send(client_fd, "SECURED#", 9, 0);
             }
         }
 
