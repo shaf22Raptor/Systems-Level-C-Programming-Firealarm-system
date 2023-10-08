@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // Mapping the shared memory into our process's address space
     shm_door *shared = (shm_door *)mmap(NULL, sizeof(shm_door), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, shm_offset);
     if(shared == MAP_FAILED) {
         perror("mmap()");
