@@ -9,21 +9,42 @@
 #include <string.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 256
+#define BUFFER_SIZE 256 // Maximum buffer size for communication
 
+// Struct definition for the shared memory structure representing a door
 typedef struct {
-    char status; // 'O', 'C', 'o', 'c'
+    char status; // 'O' for open , 'C' for closed, 'o' for opening, 'c' for closing
     pthread_mutex_t mutex;
     pthread_cond_t cond_start;
     pthread_cond_t cond_end;
 } shm_door;
 
+// Helper function to receive data until a specific delimiter is encountered or max length reached
+ssize_t recv_until(int sockfd, char *buf, char delimiter, size_t max_len) {
+    ssize_t total_received = 0, received;
+    char c;
+    while (total_received < max_len - 1) {
+        received = recv(sockfd, &c, 1, 0);
+        if (received <= 0) {
+            return received;
+        }
+        buf[total_received++] = c;
+        if (c == delimiter) {
+            break;
+        }
+    }
+    buf[total_received] = '\0';  // Null terminate the string
+    return total_received;
+}
+
 int main(int argc, char **argv) {
+    // Checking correct number of arguments provided
     if(argc != 7) {
         fprintf(stderr, "Usage: {id} {address:port} {FAIL_SAFE | FAIL_SECURE} {shared memory path} {shared memory offset} {overseer address:port}\n");
         return 1;
     }
 
+    // Parsing command line arguments
     int id = atoi(argv[1]);
     const char *bind_address = argv[2];
     const char *door_mode = argv[3];
@@ -56,11 +77,13 @@ int main(int argc, char **argv) {
     serverAddr.sin_port = htons(atoi(strchr(bind_address, ':') + 1));
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
+    // Binding to the specified address and port
     if(bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("bind()");
         return 1;
     }
 
+    // Listening for incoming connections
     if(listen(sockfd, 5) == -1) {
         perror("listen()");
         return 1;
@@ -80,16 +103,23 @@ int main(int argc, char **argv) {
     send(overseer_fd, message, strlen(message), 0);
     close(overseer_fd);
 
+
+    // Main loop to handle incoming connections and commands
     while(1) {
         struct sockaddr_in clientAddr;
         socklen_t clientLen = sizeof(clientAddr);
         int client_fd = accept(sockfd, (struct sockaddr*)&clientAddr, &clientLen);
 
         char buffer[BUFFER_SIZE];
-        recv(client_fd, buffer, sizeof(buffer), 0);
+        if (recv_until(client_fd, buffer, '#', sizeof(buffer)) <= 0) {
+            close(client_fd);
+            continue;
+        }
 
+        // Locking the mutex for synchronized access to door status
         pthread_mutex_lock(&shared->mutex);
 
+        // Handling various door commands (OPEN, CLOSE, EMERGENCY OPEN, SECURE CLOSE)
         if(strcmp(buffer, "OPEN#") == 0) {
             if(shared->status == 'O') {
                 send(client_fd, "ALREADY#", 9, 0);
@@ -146,7 +176,10 @@ int main(int argc, char **argv) {
             }
         }
 
+        // Unlocking the mutex after processing the command
         pthread_mutex_unlock(&shared->mutex);
+        
+        // Closing the client connection
         close(client_fd);
     }
 
