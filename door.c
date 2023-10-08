@@ -1,0 +1,157 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <unistd.h>
+
+#define BUFFER_SIZE 256
+
+typedef struct {
+    char status; // 'O', 'C', 'o', 'c'
+    pthread_mutex_t mutex;
+    pthread_cond_t cond_start;
+    pthread_cond_t cond_end;
+} shm_door;
+
+int main(int argc, char **argv) {
+    if(argc != 7) {
+        fprintf(stderr, "Usage: {id} {address:port} {FAIL_SAFE | FAIL_SECURE} {shared memory path} {shared memory offset} {overseer address:port}\n");
+        return 1;
+    }
+
+    int id = atoi(argv[1]);
+    const char *bind_address = argv[2];
+    const char *door_mode = argv[3];
+    const char *shm_path = argv[4];
+    off_t shm_offset = (off_t)atoi(argv[5]);
+    const char *overseer_addr = argv[6];
+
+    // Open shared memory
+    int shm_fd = shm_open(shm_path, O_RDWR, 0);
+    if(shm_fd == -1) {
+        perror("shm_open()");
+        return 1;
+    }
+
+    shm_door *shared = (shm_door *)mmap(NULL, sizeof(shm_door), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, shm_offset);
+    if(shared == MAP_FAILED) {
+        perror("mmap()");
+        return 1;
+    }
+
+    // Setup TCP socket
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(sockfd == -1) {
+        perror("socket()");
+        return 1;
+    }
+
+    struct sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(atoi(strchr(bind_address, ':') + 1));
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+
+    if(bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+        perror("bind()");
+        return 1;
+    }
+
+    if(listen(sockfd, 5) == -1) {
+        perror("listen()");
+        return 1;
+    }
+
+    // Send initialisation message to overseer
+    int overseer_fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in overseerAddr;
+    overseerAddr.sin_family = AF_INET;
+    overseerAddr.sin_port = htons(atoi(strchr(overseer_addr, ':') + 1));
+    overseerAddr.sin_addr.s_addr = inet_addr(overseer_addr);
+
+    connect(overseer_fd, (struct sockaddr*)&overseerAddr, sizeof(overseerAddr));
+
+    char message[BUFFER_SIZE];
+    snprintf(message, sizeof(message), "DOOR %d %s %s#", id, bind_address, door_mode);
+    send(overseer_fd, message, strlen(message), 0);
+    close(overseer_fd);
+
+    while(1) {
+        struct sockaddr_in clientAddr;
+        socklen_t clientLen = sizeof(clientAddr);
+        int client_fd = accept(sockfd, (struct sockaddr*)&clientAddr, &clientLen);
+
+        char buffer[BUFFER_SIZE];
+        recv(client_fd, buffer, sizeof(buffer), 0);
+
+        pthread_mutex_lock(&shared->mutex);
+
+        if(strcmp(buffer, "OPEN#") == 0) {
+            if(shared->status == 'O') {
+                send(client_fd, "ALREADY#", 9, 0);
+            } else {
+                send(client_fd, "OPENING#", 9, 0);
+                shared->status = 'o';
+                pthread_cond_signal(&shared->cond_start);
+                pthread_cond_wait(&shared->cond_end, &shared->mutex);
+                shared->status = 'O';
+                send(client_fd, "OPENED#", 8, 0);
+            }
+        } 
+        
+        else if(strcmp(buffer, "CLOSE#") == 0) {
+            if(shared->status == 'C') {
+                send(client_fd, "ALREADY#", 9, 0);
+            } else {
+                send(client_fd, "CLOSING#", 9, 0);
+                shared->status = 'c';
+                pthread_cond_signal(&shared->cond_start);
+                pthread_cond_wait(&shared->cond_end, &shared->mutex);
+                shared->status = 'C';
+                send(client_fd, "CLOSED#", 8, 0);
+            }
+        } 
+        
+        else if(strcmp(buffer, "OPEN_EMERG#") == 0) {
+            if(shared->status == 'O') {
+                send(client_fd, "ALREADY_OPEN#", 13, 0);
+            } else {
+                send(client_fd, "EMERG_OPENING#", 14, 0);
+                shared->status = 'o';
+                pthread_cond_signal(&shared->cond_start);
+                pthread_cond_wait(&shared->cond_end, &shared->mutex);
+                shared->status = 'O';
+                send(client_fd, "EMERG_OPENED#", 13, 0);
+            }
+        } 
+        
+        else if(strcmp(buffer, "CLOSE_SECURE#") == 0) {
+            if(shared->status == 'C') {
+                send(client_fd, "ALREADY_CLOSED#", 15, 0);
+            } else {
+                send(client_fd, "SECURE_CLOSING#", 15, 0);
+                // This is where any additional security mechanism can be implemented, for instance, wait for 5 seconds.
+                sleep(5);  // wait for 5 seconds
+                shared->status = 'c';
+                pthread_cond_signal(&shared->cond_start);
+                pthread_cond_wait(&shared->cond_end, &shared->mutex);
+                shared->status = 'C';
+                send(client_fd, "SECURE_CLOSED#", 14, 0);
+            }
+        }
+
+        pthread_mutex_unlock(&shared->mutex);
+        close(client_fd);
+    }
+
+    // Cleanup
+    munmap(shared, sizeof(shm_door));
+    close(shm_fd);
+    close(sockfd);
+
+    return 0;
+}
