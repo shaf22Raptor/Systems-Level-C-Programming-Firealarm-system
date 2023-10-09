@@ -11,12 +11,22 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-struct {
+char header[4] = "FIRE";
+
+typedef struct {
     char status; // '-' for inactive, '*' for active
     pthread_mutex_t mutex;
     pthread_cond_t cond;
 } shm_callpoint;
 
+struct EmergencyDatagram{
+    char header[4]; // {'F', 'I', 'R', 'E'}
+};
+
+/// @brief Safety Critical system
+/// @param argc 
+/// @param argv 
+/// @return 
 int main(int argc, char **argv) 
 {
     // see if enough arguments were supplied for this program
@@ -26,10 +36,79 @@ int main(int argc, char **argv)
     }
 
     // intialise parameters for system by converting from char[] to int when necessary
-    int delay = atoi(argv[1]);
+    int resendDelay = atoi(argv[1]);
     const char *shm_path = argv[2];
     off_t shm_offset = (off_t)atoi(argv[3]);
-    const char *fire_alarm_addr = argv[5];
+    const char *firealarm_addr = argv[5];
+
+    // Initialise UDP connection to overseer
+    int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);   // Create socket for client and corresponding error handling
+    if (udp_sockfd == -1) { 
+        perror("\nsocket()\n");
+        return 1;
+    }
+
+    // Define server address and port
+    struct sockaddr_in firealarmAddr;
+    firealarmAddr.sin_family = AF_INET;
+    firealarmAddr.sin_port = htons(&firealarm_addr);
+    firealarmAddr.sin_addr.s_addr = "127.0.0.1";
+
+    if (bind(udp_sockfd, (struct sockaddr *)&firealarm_addr, sizeof(firealarm_addr)) == -1) {
+        perror("bind");
+        exit(1);
+    }
+
+    /*********************************************
+    Code to connect to share memory with simulator
+    *********************************************/
+
+    // initialise shm
+    int shm_fd = shm_open(shm_path, O_RDWR, 0);
+
+    // handle failed shm_open
+    if (shm_fd == -1) {
+        perror("shm_open()");
+        exit(1);
+    }
+
+    // Obtain statistics related to shm. Intended to find size of shm.
+    struct stat shm_stat;
+
+    if (fstat(shm_fd, &shm_stat) == -1) {
+        perror("fstat()");
+        exit(1);
+    }
+
+    printf("Shared memory file size: %ld\n", shm_stat.st_size);
+
+    // mmap 
+    char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+
+    if (shm == MAP_FAILED) {
+        perror("mmap()");
+        exit(1);
+    }
+
+    // cast memory offset onto card_reader
+    shm_callpoint *shared = (shm_callpoint *)(shm + shm_offset);
+
+    // mutex lock for normal operation
+    pthread_mutex_lock(&shared->mutex);
+
+    for(;;) {
+        if (shared->status == '*') {
+            for(;;) {
+                /********************
+                SEND EMERGENCY ALARM
+                //******************/
+                ssize_t emergencyAlarm = sendto(udp_sockfd, header, strlen(header), 0,(struct sockaddr *)&firealarm_addr, sizeof(firealarm_addr));
+                sleep(resendDelay);
+            }
+        }
+        pthread_cond_wait(&shared->status, &shared->mutex);
+    }
+    // GENERAL CLEANUP
 
     return 0;
 }

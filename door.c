@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define BUFFER_SIZE 256 // Maximum buffer size for communication
 
