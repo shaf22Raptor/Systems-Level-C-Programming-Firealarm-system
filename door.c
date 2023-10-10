@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     const char *door_mode = argv[3];
     const char *shm_path = argv[4];
     off_t shm_offset = (off_t)atoi(argv[5]);
-    const char *overseer_addr = argv[6];
+    const char *overseer_addr = argv[6]; // temporary variable type
 
     // Open shared memory
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
@@ -74,6 +74,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // Define server address and port
     struct sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(atoi(strchr(bind_address, ':') + 1));
@@ -96,7 +97,7 @@ int main(int argc, char **argv) {
     struct sockaddr_in overseerAddr;
     overseerAddr.sin_family = AF_INET;
     overseerAddr.sin_port = htons(atoi(strchr(overseer_addr, ':') + 1));
-    overseerAddr.sin_addr.s_addr = inet_addr(overseer_addr);
+    overseerAddr.sin_addr.s_addr = inet_addr(strtok(overseer_addr, ":"));
 
     connect(overseer_fd, (struct sockaddr*)&overseerAddr, sizeof(overseerAddr));
 
