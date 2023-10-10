@@ -108,7 +108,35 @@ int main(int argc, char **argv)
         }
         pthread_cond_wait(&shared->status, &shared->mutex);
     }
-    // GENERAL CLEANUP
+    pthread_mutex_unlock(&shared->mutex);
+    
+    //general cleanup with error handling
+    if (shm_unlink(shm_path) == -1) {
+        perror("shm_unlink()");
+        exit(1);
+    }   
+
+    if(pthread_mutex_destroy(&shared->mutex) !=0) {
+        perror("pthread_mutex_destroy()");
+        exit(1);
+    }
+
+    if(pthread_cond_destroy(&shared->status) != 0) {
+        perror("pthread_cond_destroy");
+        exit(1);
+    }
+
+    if(pthread_cond_destroy(&shared->status) != 0) {
+        perror("pthread_cond_destroy");
+        exit(1);
+    }
+    
+    if (munmap(shm, shm_stat.st_size) == -1) {
+        perror("munmap()");
+    }
+
+    close(udp_sockfd);
+    close(shm_fd);
 
     return 0;
 }
