@@ -90,7 +90,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    
+    /**************************
+    Code to connect to overseer
+    **************************/
 
     // Main loop
     while (1) {
