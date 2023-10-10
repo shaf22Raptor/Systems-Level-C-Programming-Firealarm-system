@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // Define server address and port
     struct sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(atoi(strchr(bind_address, ':') + 1));
@@ -106,11 +107,51 @@ int main(int argc, char **argv) {
         // Handle different datagram types
         if (strncmp(buffer, "FIRE", 4) == 0) {
             // Handle fire emergency
+            pthread_mutex_lock(&shared->mutex);
+            shared->alarm = 'A'; 
+            pthread_mutex_unlock(&shared->mutex);
+            pthread_cond_signal(&shared->cond);
+
+            // Open doors for emergency
+            for (int i = 0; i < door_count; i++) {
+                int door_tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
+                if (door_tcp_fd == -1) {
+                    perror("socket()");
+                    continue;
+                }
+
+                struct sockaddr_in doorAddr;
+                doorAddr.sin_family = AF_INET;
+                doorAddr.sin_port = door_ports[i];
+                doorAddr.sin_addr = door_addresses[i];
+
+                if (connect(door_tcp_fd, (struct sockaddr*)&doorAddr, sizeof(doorAddr)) != -1) {
+                    char emergency_msg[] = "OPEN_EMERG#";
+                    send(door_tcp_fd, emergency_msg, strlen(emergency_msg), 0);
+                    close(door_tcp_fd);
+                }
+            }
         } else if (strncmp(buffer, "TEMP", 4) == 0) {
             // Handle temperature update
         } else if (strncmp(buffer, "DOOR", 4) == 0) {
-            door_datagram *door_data = (door_datagram *)buffer;
-            // Register the door
+            if (door_count < MAX_DOORS) {
+                door_datagram *door_data = (door_datagram *)buffer;
+                door_addresses[door_count] = door_data->door_addr;
+                door_ports[door_count] = door_data->door_port;
+                door_count++;
+
+                // Send a confirmation to the overseer
+                door_confirmation confirm;
+                memcpy(confirm.header, "DREG", 4);
+                confirm.door_addr = door_data->door_addr;
+                confirm.door_port = door_data->door_port;
+
+                struct sockaddr_in overseerAddress;
+                overseerAddress.sin_family = AF_INET;
+                overseerAddress.sin_port = htons(atoi(strchr(overseer_addr, ':') + 1));
+                overseerAddress.sin_addr.s_addr = inet_addr(strtok(overseer_addr, ":"));
+                sendto(udp_fd, &confirm, sizeof(confirm), 0, (struct sockaddr*)&overseerAddress, sizeof(overseerAddress));
+            }
         } else {
             // Ignore other datagrams
             continue;
