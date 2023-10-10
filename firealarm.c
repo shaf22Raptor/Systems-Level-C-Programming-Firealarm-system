@@ -133,6 +133,8 @@ int main(int argc, char **argv) {
             }
         } else if (strncmp(buffer, "TEMP", 4) == 0) {
             // Handle temperature update
+
+            
         } else if (strncmp(buffer, "DOOR", 4) == 0) {
             if (door_count < MAX_DOORS) {
                 door_datagram *door_data = (door_datagram *)buffer;
