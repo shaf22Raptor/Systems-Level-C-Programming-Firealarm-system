@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+// Message for emergency Datagram
 char header[4] = "FIRE";
 
 typedef struct {
@@ -19,9 +20,6 @@ typedef struct {
     pthread_cond_t cond;
 } shm_callpoint;
 
-struct EmergencyDatagram{
-    char header[4]; // {'F', 'I', 'R', 'E'}
-};
 
 /// @brief Safety Critical system
 /// @param argc 
@@ -41,7 +39,7 @@ int main(int argc, char **argv)
     off_t shm_offset = (off_t)atoi(argv[3]);
     const char *firealarm_addr = argv[5];
 
-    // Initialise UDP connection to overseer
+    // Initialise UDP connection to fire alarm unit
     int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);   // Create socket for client and corresponding error handling
     if (udp_sockfd == -1) { 
         perror("\nsocket()\n");
@@ -103,7 +101,7 @@ int main(int argc, char **argv)
                 SEND EMERGENCY ALARM
                 //******************/
                 ssize_t emergencyAlarm = sendto(udp_sockfd, header, strlen(header), 0,(struct sockaddr *)&firealarm_addr, sizeof(firealarm_addr));
-                sleep(resendDelay);
+                usleep(resendDelay);
             }
         }
         pthread_cond_wait(&shared->status, &shared->mutex);
