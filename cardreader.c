@@ -10,8 +10,11 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+
 #define BUFFER_SIZE 16
 #define RECEIVED_BUFFER_SIZE 1024
+
+#include <tcp_communication.h>
 
 // Struct used for card reader shared memory as specified
 typedef struct {
@@ -37,35 +40,35 @@ int main(int argc, char **argv)
     int waitTime = atoi(argv[2]);
     const char *shm_path = argv[3];
     off_t shm_offset = (off_t)atoi(argv[4]);
-    const char *overseer_addr = argv[5]; // temporary variable type
+    const char *overseer_port = argv[5]; // temporary variable type
 
     /**************************
     Code to connect to overseer
     **************************/
 
     // Initialise TCP connection to overseer
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);   // Create socket for client and corresponding error handling
-    if (sockfd == -1) { 
-        perror("\nsocket()\n");
-        return 1;
-    }
- 
+
     // Define server address and port
     struct sockaddr_in serverAddr;
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(&overseer_addr);
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    configureServerAddress(&serverAddr, "127.0.0.1", *overseer_port);
 
+    // Create socket
+    int sockfd = createSocket();
+    if (sockfd == 1) {
+        perror("\nsocket()\n");
+    }
+ 
     // Establish connection and corresponding error handling
-    int connection_status = connect(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
-    if (connection_status == -1) {
+    int connection_status = establishConnection(sockfd, &serverAddr);
+    if (connection_status == 1) {
         printf("Error: Connection to the server failed\n");
         exit(1);
     }
+
     // Initialisation message to overseer
     char helloMessage[256];
     snprintf(helloMessage, sizeof(helloMessage), "CARDREADER %s HELLO#", id);
-    send(sockfd, helloMessage, strlen(helloMessage), 0);
+    sendData(sockfd, helloMessage);
 
     /*********************************************
     Code to connect to share memory with simulator

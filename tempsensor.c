@@ -18,7 +18,7 @@ typedef struct {
 } shm_sensor;
 
 int main(int argc, char **argv[]) {
-    if (argc!=6) {
+    if (argc<6) {
         fprintf(stderr, "usage: {id} {address:port} {max condvar wait (microseconds)} {max update wait (microseconds)} {shared memory path} {shared memory offset} {receiver address:port}...");
         exit(1);
     }
