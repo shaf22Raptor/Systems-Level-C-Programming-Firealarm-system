@@ -55,20 +55,22 @@ int main(int argc, char **argv)
     // Create socket
     int sockfd = createSocket();
     if (sockfd == 1) {
-        perror("\nsocket()\n");
+        exit(1);
     }
  
     // Establish connection and corresponding error handling
     int connection_status = establishConnection(sockfd, &serverAddr);
     if (connection_status == 1) {
-        printf("Error: Connection to the server failed\n");
         exit(1);
     }
 
     // Initialisation message to overseer
     char helloMessage[256];
     snprintf(helloMessage, sizeof(helloMessage), "CARDREADER %s HELLO#", id);
-    sendData(sockfd, helloMessage);
+    int sent = sendData(sockfd, helloMessage);
+    if (connection_status == 1) {
+        exit(1);
+    }
 
     /*********************************************
     Code to connect to share memory with simulator
