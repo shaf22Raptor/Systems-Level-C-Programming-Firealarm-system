@@ -48,13 +48,17 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Parsing command line arguments
+    // Parse command line arguments
     int id = atoi(argv[1]);
     const char *bind_address = argv[2];
     const char *door_mode = argv[3];
     const char *shm_path = argv[4];
     off_t shm_offset = (off_t)atoi(argv[5]);
-    const char *overseer_addr = argv[6]; // temporary variable type
+    char *token;
+    token = strtok(argv[6], ":");
+    const char *overseer_ip = token;
+    token = strtok(NULL, ":");
+    const char *overseer_port = token;
 
     // Open shared memory
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
