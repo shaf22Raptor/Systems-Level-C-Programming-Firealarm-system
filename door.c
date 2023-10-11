@@ -11,10 +11,10 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#define BUFFER_SIZE 16
+#define BUFFER_SIZE 256 // Maximum buffer size for communication
 
 struct door_shm {
-    char status; // 'O', 'C', 'o', 'c'
+    char status; 
     pthread_mutex_t mutex;
     pthread_cond_t cond_start;
     pthread_cond_t cond_end;
@@ -28,10 +28,11 @@ void configureServerAddress(struct sockaddr_in *serverAddr, const char *ip, int 
 
 int main(int argc, char **argv) {
     if (argc != 7) {
-        fprintf(stderr, "Usage: {id} {address:port} {FAIL_SAFE | FAIL_SECURE} {shared memory path} {shared memory offset} {overseer address:port}\n");
+        fprintf(stderr, "Usage: %s {id} {address:port} {FAIL_SAFE | FAIL_SECURE} {shared memory path} {shared memory offset} {overseer address:port}\n", argv[0]);
         exit(1);
     }
 
+    // Parse arguments
     int id = atoi(argv[1]);
     char *address = strtok(argv[2], ":");
     int port = atoi(strtok(NULL, ":"));
@@ -41,7 +42,7 @@ int main(int argc, char **argv) {
     char *overseer_addr = strtok(argv[6], ":");
     int overseer_port = atoi(strtok(NULL, ":"));
 
-    // TCP connection setup
+    // Setup TCP connection
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         perror("socket creation failed");
@@ -56,6 +57,7 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
+    // Send initialization message
     char init_message[BUFFER_SIZE];
     snprintf(init_message, sizeof(init_message), "DOOR %d %s:%d %s#", id, address, port, security_mode);
     send(sockfd, init_message, strlen(init_message), 0);
@@ -63,6 +65,7 @@ int main(int argc, char **argv) {
     // Shared memory setup
     int shm_fd = shm_open(shm_path, O_RDWR, 0666);
     struct door_shm *shared = mmap(NULL, sizeof(struct door_shm), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, shm_offset);
+    shared->status = 'C';
 
     while (1) {
         pthread_mutex_lock(&shared->mutex);
