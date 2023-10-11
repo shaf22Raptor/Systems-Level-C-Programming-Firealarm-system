@@ -24,6 +24,7 @@ typedef struct {
 ssize_t recv_until(int sockfd, char *buf, char delimiter, size_t max_len) {
     ssize_t total_received = 0, received;
     char c;
+    
     while (total_received < max_len - 1) {
         received = recv(sockfd, &c, 1, 0);
         if (received <= 0) {
@@ -34,9 +35,11 @@ ssize_t recv_until(int sockfd, char *buf, char delimiter, size_t max_len) {
             break;
         }
     }
+    
     buf[total_received] = '\0';  // Null terminate the string
     return total_received;
 }
+
 
 int main(int argc, char **argv) {
     // Checking correct number of arguments provided
@@ -56,21 +59,21 @@ int main(int argc, char **argv) {
     // Open shared memory
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
     if(shm_fd == -1) {
-        perror("shm_open()");
+        perror("share memory error\n");
         return 1;
     }
 
     // Mapping the shared memory into our process's address space
     shm_door *shared = (shm_door *)mmap(NULL, sizeof(shm_door), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, shm_offset);
     if(shared == MAP_FAILED) {
-        perror("mmap()");
+        perror("Mapping the shared memory error\n");
         return 1;
     }
 
     // Setup TCP socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if(sockfd == -1) {
-        perror("socket()");
+        perror("socket error \n");
         return 1;
     }
 
@@ -82,24 +85,27 @@ int main(int argc, char **argv) {
 
     // Binding to the specified address and port
     if(bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("bind()");
+        perror("binding error\n");
         return 1;
     }
 
     // Listening for incoming connections
     if(listen(sockfd, 5) == -1) {
-        perror("listen()");
+        perror("listening error \n");
         return 1;
-    }
+    } 
 
-    // Send initialisation message to overseer
+// Send initialization message to overseer
     int overseer_fd = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in overseerAddr;
     overseerAddr.sin_family = AF_INET;
-    overseerAddr.sin_port = htons(atoi(strchr(overseer_addr, ':') + 1));
-    overseerAddr.sin_addr.s_addr = inet_addr(strtok(overseer_addr, ":"));
-
-    connect(overseer_fd, (struct sockaddr*)&overseerAddr, sizeof(overseerAddr));
+    overseerAddr.sin_port = htons(atoi(overseer_port));
+    overseerAddr.sin_addr.s_addr = inet_addr(overseer_ip);
+    
+    if (connect(overseer_fd, (struct sockaddr*)&overseerAddr, sizeof(overseerAddr)) != 0) {
+        perror("connect()");
+        return 1;
+    }
 
     char message[BUFFER_SIZE];
     snprintf(message, sizeof(message), "DOOR %d %s %s#", id, bind_address, door_mode);
