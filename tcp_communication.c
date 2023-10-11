@@ -1,4 +1,3 @@
-// tcp_operations.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +42,13 @@ int sendData(int socket, const char *data) {
     return sent;
 }
 
-int receiveData(int socket, char *buffer, int buffer_size) {
+int receiveData(int socket, char *buffer) {
     // Receive data
-    // ...
+    int dataReceived = recv(socket, buffer, sizeof(buffer), 0);
+    if (dataReceived == -1) {
+        printf("Error: receive data failed");
+        return 1;
+    }
+    
+    return dataReceived;
 }

@@ -129,7 +129,7 @@ int main(int argc, char **argv)
 
             // Logic to recieve data
             char receiveBuf[RECEIVED_BUFFER_SIZE];
-            int messageReceived = recv(sockfd, receiveBuf, sizeof(receiveBuf), 0);
+            int messageReceived = receiveData(sockfd, receiveBuf);
             // Logic to see handle error or connection close
             if (messageReceived == -1 || messageReceived == 0) {
                 shared->response = 'N';

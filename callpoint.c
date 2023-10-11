@@ -11,6 +11,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+#include <udp_communication.h>
+
 // Message for emergency Datagram
 char header[4] = "FIRE";
 
@@ -37,25 +39,16 @@ int main(int argc, char **argv)
     int resendDelay = atoi(argv[1]);
     const char *shm_path = argv[2];
     off_t shm_offset = (off_t)atoi(argv[3]);
-    const char *firealarm_addr = argv[5];
-
-    // Initialise UDP connection to fire alarm unit
-    int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);   // Create socket for client and corresponding error handling
-    if (udp_sockfd == -1) { 
-        perror("\nsocket()\n");
-        return 1;
-    }
+    const char *firealarm_port = argv[5];
 
     // Define server address and port
     struct sockaddr_in firealarmAddr;
-    firealarmAddr.sin_family = AF_INET;
-    firealarmAddr.sin_port = htons(&firealarm_addr);
-    firealarmAddr.sin_addr.s_addr = "127.0.0.1";
+    configureServerAddress(&firealarmAddr, "127.0.0.1", firealarm_port);
 
-    if (bind(udp_sockfd, (struct sockaddr *)&firealarm_addr, sizeof(firealarm_addr)) == -1) {
-        perror("bind");
-        exit(1);
-    }
+    // Initialise UDP connection to fire alarm unit
+    int udp_sockfd = createSocket();
+
+
 
     /*********************************************
     Code to connect to share memory with simulator
@@ -100,7 +93,7 @@ int main(int argc, char **argv)
                 /********************
                 SEND EMERGENCY ALARM
                 //******************/
-                ssize_t emergencyAlarm = sendto(udp_sockfd, header, strlen(header), 0,(struct sockaddr *)&firealarm_addr, sizeof(firealarm_addr));
+                ssize_t emergencyAlarm = sendData(udp_sockfd, shared->status, &firealarmAddr);
                 usleep(resendDelay);
             }
         }
