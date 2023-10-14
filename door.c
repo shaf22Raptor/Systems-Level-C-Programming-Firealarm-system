@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
         pthread_mutex_unlock(&shared->mutex);
         close(client);
     }
-    
+
     close(firealarm_sock);
     close(shm_fd);
     return 0;
