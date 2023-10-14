@@ -8,135 +8,144 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
-#define BUFFER_SIZE 256 // Maximum buffer size for communication
-
-struct door_shm {
-    char status; 
+// Shared memory structure
+typedef struct {
+    char status; // 'O', 'C', 'o', 'c'
     pthread_mutex_t mutex;
     pthread_cond_t cond_start;
     pthread_cond_t cond_end;
-};
+} shm_door;
 
-void configureServerAddress(struct sockaddr_in *serverAddr, const char *ip, int port) {
-    serverAddr->sin_family = AF_INET;
-    serverAddr->sin_port = htons(port);
-    inet_pton(AF_INET, ip, &serverAddr->sin_addr);
+void send_msg(int sockfd, const char* msg) {
+    send(sockfd, msg, strlen(msg), 0);
 }
 
 int main(int argc, char **argv) {
     if (argc != 7) {
-        fprintf(stderr, "Usage: %s {id} {address:port} {FAIL_SAFE | FAIL_SECURE} {shared memory path} {shared memory offset} {overseer address:port}\n", argv[0]);
+        fprintf(stderr, "Usage: door {id} {address:port} {FAIL_SAFE | FAIL_SECURE} {shared memory path} {shared memory offset} {overseer address:port}\n");
         exit(1);
     }
 
-    // Parse arguments
+    // Initialization
     int id = atoi(argv[1]);
-    char *address = strtok(argv[2], ":");
-    int port = atoi(strtok(NULL, ":"));
-    char *security_mode = argv[3];
-    char *shm_path = argv[4];
-    off_t shm_offset = (off_t)atoi(argv[5]);
-    char *overseer_addr = strtok(argv[6], ":");
-    int overseer_port = atoi(strtok(NULL, ":"));
+    char *addr_port = argv[2];
+    char *config = argv[3];
+    const char *shm_path = argv[4];
+    int shm_offset = atoi(argv[5]);
+    char *overseer_addr_port = argv[6];
 
-    // Setup TCP connection
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        perror("socket creation failed");
-        exit(EXIT_FAILURE);
+    struct sockaddr_in servaddr;
+    servaddr.sin_family = AF_INET;
+    char *token = strtok(addr_port, ":");
+    servaddr.sin_addr.s_addr = inet_addr(token);
+    token = strtok(NULL, ":");
+    servaddr.sin_port = htons(atoi(token));
+
+    bind(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
+    listen(sockfd, 10);
+
+    // Fire alarm connection setup (based on requirement but actual usage not provided in the scenario)
+    int firealarm_sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in firealarm_addr;
+    // Configuration for fire alarm address and port should be provided
+    // For this example, we'll use "127.0.0.1:4500"
+    firealarm_addr.sin_family = AF_INET;
+    firealarm_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    firealarm_addr.sin_port = htons(5000);
+
+    if (connect(firealarm_sock, (struct sockaddr*)&firealarm_addr, sizeof(firealarm_addr)) < 0) {
+        perror("Connection to fire alarm failed");
+        exit(1);
     }
 
-    struct sockaddr_in serverAddr;
-    configureServerAddress(&serverAddr, overseer_addr, overseer_port);
-
-    if (connect(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
-        perror("connection failed");
-        exit(EXIT_FAILURE);
+    // Shared memory initialization
+    int shm_fd = shm_open(shm_path, O_RDWR, 0);
+    if (shm_fd == -1) {
+        perror("shm_open()");
+        exit(1);
     }
 
-    // Send initialization message
-    char init_message[BUFFER_SIZE];
-    snprintf(init_message, sizeof(init_message), "DOOR %d %s:%d %s#", id, address, port, security_mode);
-    send(sockfd, init_message, strlen(init_message), 0);
+    struct stat shm_stat;
+    if (fstat(shm_fd, &shm_stat) == -1) {
+        perror("fstat()");
+        exit(1);
+    }
 
-    // Shared memory setup
-    int shm_fd = shm_open(shm_path, O_RDWR, 0666);
-    struct door_shm *shared = mmap(NULL, sizeof(struct door_shm), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, shm_offset);
+    char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shm == MAP_FAILED) {
+        perror("mmap()");
+        exit(1);
+    }
+
+    shm_door *shared = (shm_door *)(shm + shm_offset);
     shared->status = 'C';
 
+    // Connect to overseer and send initialization message
+    struct sockaddr_in overseer;
+    overseer.sin_family = AF_INET;
+    token = strtok(overseer_addr_port, ":");
+    overseer.sin_addr.s_addr = inet_addr(token);
+    token = strtok(NULL, ":");
+    overseer.sin_port = htons(atoi(token));
+    
+    int o_sock = socket(AF_INET, SOCK_STREAM, 0);
+    connect(o_sock, (struct sockaddr*)&overseer, sizeof(overseer));
+
+    char init_msg[100];
+    snprintf(init_msg, sizeof(init_msg), "DOOR %d %s %s#\n", id, addr_port, config);
+    send_msg(o_sock, init_msg);
+    close(o_sock);
+
+    // Normal operation loop
     while (1) {
+        int client = accept(sockfd, NULL, NULL);
+        char buffer[100];
+        int bytes = recv(client, buffer, sizeof(buffer) - 1, 0);
+        if (bytes <= 0) {
+            close(client);
+            continue;
+        }
+        buffer[bytes] = '\0';
+
         pthread_mutex_lock(&shared->mutex);
-
-        int client_sock = accept(sockfd, NULL, NULL);
-        char buffer[BUFFER_SIZE];
-        recv(client_sock, buffer, sizeof(buffer), 0);
-
+        if (strcmp(buffer, "FIRE_ALARM#") == 0) {
+            send_msg(firealarm_sock, "FIRE_ALARM#\n");
+        }
+        
         if (strcmp(buffer, "OPEN#") == 0) {
+            // Implement the logic for opening the door based on the received message
             if (shared->status == 'O') {
-                send(client_sock, "ALREADY#", 9, 0);
+                send_msg(client, "ALREADY#\n");
             } else {
-                send(client_sock, "OPENING#", 9, 0);
                 shared->status = 'o';
                 pthread_cond_signal(&shared->cond_start);
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
                 shared->status = 'O';
-                send(client_sock, "OPENED#", 8, 0);
+                send_msg(client, "OPENED#\n");
             }
         } else if (strcmp(buffer, "CLOSE#") == 0) {
+            // Implement the logic for closing the door based on the received message
             if (shared->status == 'C') {
-                send(client_sock, "ALREADY#", 9, 0);
+                send_msg(client, "ALREADY#\n");
             } else {
-                send(client_sock, "CLOSING#", 9, 0);
                 shared->status = 'c';
                 pthread_cond_signal(&shared->cond_start);
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
                 shared->status = 'C';
-                send(client_sock, "CLOSED#", 8, 0);
+                send_msg(client, "CLOSED#\n");
             }
-        } else if (strcmp(buffer, "OPEN_EMERG#") == 0) {
-        if (shared->status == 'O') {
-            // Door is already open, respond and move to emergency mode
-            send(client_sock, "EMERGENCY_MODE#", 15, 0);
-        } else {
-            // Open the door for emergency and move to emergency mode
-            send(client_sock, "OPENING#", 9, 0);
-            shared->status = 'o';
-            pthread_cond_signal(&shared->cond_start);
-            pthread_cond_wait(&shared->cond_end, &shared->mutex);
-            shared->status = 'O';
-            send(client_sock, "OPENED#", 8, 0);
-            send(client_sock, "EMERGENCY_MODE#", 15, 0);
         }
+        // Add logic for other commands as needed
 
-        } else if (strcmp(buffer, "CLOSE_SECURE#") == 0) {
-            if (shared->status == 'C') {
-                // Door is already closed, respond and move to secure mode
-                send(client_sock, "SECURE_MODE#", 12, 0);
-            } else {
-                // Close the door for security and move to secure mode
-                send(client_sock, "CLOSING#", 9, 0);
-                shared->status = 'c';
-                pthread_cond_signal(&shared->cond_start);
-                pthread_cond_wait(&shared->cond_end, &shared->mutex);
-                shared->status = 'C';
-                send(client_sock, "CLOSED#", 8, 0);
-                send(client_sock, "SECURE_MODE#", 12, 0);
-            }
-        }
-        
         pthread_mutex_unlock(&shared->mutex);
-        close(client_sock);
+        close(client);
     }
-
-    close(sockfd);
-    pthread_mutex_destroy(&shared->mutex);
-    pthread_cond_destroy(&shared->cond_start);
-    pthread_cond_destroy(&shared->cond_end);
-    munmap(shared, sizeof(struct door_shm));
+    
+    close(firealarm_sock);
     close(shm_fd);
-
     return 0;
 }
