@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -48,21 +49,6 @@ int main(int argc, char **argv) {
     bind(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
     listen(sockfd, 10);
 
-    // Fire alarm connection setup (based on requirement but actual usage not provided in the scenario)
-    int firealarm_sock = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in firealarm_addr;
-    // Configuration for fire alarm address and port should be provided
-    // For this example, we'll use "127.0.0.1:4500"
-    firealarm_addr.sin_family = AF_INET;
-    firealarm_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    firealarm_addr.sin_port = htons(5000);
-
-    if (connect(firealarm_sock, (struct sockaddr*)&firealarm_addr, sizeof(firealarm_addr)) < 0) {
-        perror("Connection to fire alarm failed");
-        exit(1);
-    }
-
-    // Shared memory initialization
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
     if (shm_fd == -1) {
         perror("shm_open()");
@@ -100,6 +86,8 @@ int main(int argc, char **argv) {
     send_msg(o_sock, init_msg);
     close(o_sock);
 
+    // Shared memory initialization
+
     // Normal operation loop
     while (1) {
         int client = accept(sockfd, NULL, NULL);
@@ -111,11 +99,6 @@ int main(int argc, char **argv) {
         }
         buffer[bytes] = '\0';
 
-        pthread_mutex_lock(&shared->mutex);
-        if (strcmp(buffer, "FIRE_ALARM#") == 0) {
-            send_msg(firealarm_sock, "FIRE_ALARM#\n");
-        }
-        
         if (strcmp(buffer, "OPEN#") == 0) {
             // Implement the logic for opening the door based on the received message
             if (shared->status == 'O') {
@@ -145,7 +128,6 @@ int main(int argc, char **argv) {
         close(client);
     }
 
-    close(firealarm_sock);
     close(shm_fd);
     return 0;
 }
