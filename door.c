@@ -49,6 +49,7 @@ int main(int argc, char **argv) {
     bind(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
     listen(sockfd, 10);
 
+    // Shared memory initialization
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
     if (shm_fd == -1) {
         perror("shm_open()");
@@ -77,27 +78,54 @@ int main(int argc, char **argv) {
     overseer.sin_addr.s_addr = inet_addr(token);
     token = strtok(NULL, ":");
     overseer.sin_port = htons(atoi(token));
-    
+
     int o_sock = socket(AF_INET, SOCK_STREAM, 0);
-    connect(o_sock, (struct sockaddr*)&overseer, sizeof(overseer));
+    if (o_sock < 0) {
+        perror("socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (connect(o_sock, (struct sockaddr*)&overseer, sizeof(overseer)) < 0) {
+        perror("Failed to connect to overseer");
+        close(o_sock);
+        exit(EXIT_FAILURE);
+    }
 
     char init_msg[100];
     snprintf(init_msg, sizeof(init_msg), "DOOR %d %s %s#\n", id, addr_port, config);
-    send_msg(o_sock, init_msg);
-    close(o_sock);
-
-    // Shared memory initialization
+    if (send(o_sock, init_msg, strlen(init_msg), 0) < 0) {
+        perror("Failed to send initialization message");
+        close(o_sock);
+        exit(EXIT_FAILURE);
+    }
 
     // Normal operation loop
     while (1) {
-        int client = accept(sockfd, NULL, NULL);
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int client = accept(sockfd, (struct sockaddr*)&client_addr, &client_len);
+        if (client < 0) {
+            perror("accept failed");
+            continue; // Skip further processing for this client
+        }
+
         char buffer[100];
         int bytes = recv(client, buffer, sizeof(buffer) - 1, 0);
         if (bytes <= 0) {
+            // Handle errors or connection closure
+            if (bytes == 0) {
+                // Connection closed
+                printf("Client disconnected\n");
+            } else {
+                perror("recv failed");
+            }
             close(client);
             continue;
         }
-        buffer[bytes] = '\0';
+        buffer[bytes] = '\0'; // Null-terminate the string
+
+        // Lock the mutex before checking or changing the status
+        pthread_mutex_lock(&shared->mutex);
 
         if (strcmp(buffer, "OPEN#") == 0) {
             // Implement the logic for opening the door based on the received message
@@ -128,6 +156,7 @@ int main(int argc, char **argv) {
         close(client);
     }
 
+    // close(o_sock);
     close(shm_fd);
     return 0;
 }
