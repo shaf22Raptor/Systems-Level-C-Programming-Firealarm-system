@@ -11,12 +11,12 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#include <tcp_communication.h>
+#include "tcp_communication.h"
 
 #define BUFFER_SIZE 16
 #define RECEIVED_BUFFER_SIZE 1024
 
-
+const char programName[] = "cardreader";
 
 // Struct used for card reader shared memory as specified
 typedef struct {
@@ -44,33 +44,43 @@ int main(int argc, char **argv)
     off_t shm_offset = (off_t)atoi(argv[4]);
     const char *overseer_port = argv[5]; // temporary variable type
 
+    // Isolate port number from {ipAddress : port number}
+    char *portString= strstr(&overseer_port, ":");
+    int portNumber = atoi(portString + 1);
+
     /**************************
     Code to connect to overseer
     **************************/
-
-    // Initialise TCP connection to overseer
-
-    // Define server address and port
-    struct sockaddr_in serverAddr;
-    configureServerAddress(&serverAddr, "127.0.0.1", *overseer_port);
-
-    // Create socket
+     // Create socket
     int sockfd = createSocket();
     if (sockfd == 1) {
         exit(1);
     }
  
+    // Define server address and port
+    struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    if (inet_pton(AF_INET, "127.0.0.1",&serverAddr.sin_addr) != 1) {
+        perror("inet_pton()");
+        exit(1);
+    }
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(portNumber);
+    //configureServerAddress(&serverAddr, "127.0.0.1", *overseer_port);
+
     // Establish connection and corresponding error handling
-    int connection_status = establishConnection(sockfd, &serverAddr);
+    int connection_status = establishConnection(sockfd, &serverAddr, programName);
     if (connection_status == 1) {
+        printf("cardreader has failed");
         exit(1);
     }
 
     // Initialisation message to overseer
-    char helloMessage[256];
+    char *helloMessage;
     snprintf(helloMessage, sizeof(helloMessage), "CARDREADER %s HELLO#", id);
+    
     int sent = sendData(sockfd, helloMessage);
-    if (connection_status == 1) {
+    if (sent == 1) {
         exit(1);
     }
 

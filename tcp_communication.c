@@ -1,15 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <tcp_communication.h>
-
-void configureServerAddress(struct sockaddr_in *serverAddr, const char *server_ip, int server_port) {
-    serverAddr->sin_family = AF_INET;
-    serverAddr->sin_port = htons(server_port);
-    serverAddr->sin_addr.s_addr = inet_addr(server_ip);
-}
+#include <netdb.h>
 
 int createSocket() {
     // Create a socket, set up the server address, and connect
@@ -22,10 +19,20 @@ int createSocket() {
     return sockfd;
 }
 
-int establishConnection(int socket, struct sockaddr_in *serverAddr) {
+/*void configureServerAddressForClient(struct sockaddr_in *addr, const char *server_ip, int *server_port) {
+    memset(&addr, 0, sizeof(addr));
+    if (inet_pton(AF_INET, "127.0.0.1", (struct sockaddr *)&addr.sin_addr) != 1) {
+        perror("inet_pton()");
+        return 1;
+    }
+    addr->sin_addr.s_addr = htonl(INADDR_ANY);
+    addr->sin_port = htons(server_port);
+}
+*/
+int establishConnection(int socket, struct sockaddr_in *serverAddr, char *programName) {
     int connection_status = connect(socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
     if (connection_status == -1) {
-        printf("Error: Connection to the server failed\n");
+        printf("%s Error: Connection to the server failed\n", programName);
         return 1;
     }
     return connection_status;
@@ -33,7 +40,7 @@ int establishConnection(int socket, struct sockaddr_in *serverAddr) {
 
 int sendData(int socket, const char *data) {
     // Send data
-    int sent = send(socket, &data, strlen(&data), 0);
+    int sent = send(socket, data, strlen(data), 0);
     if (sent == -1) {
         printf("Error: Failed to send data\n");
         return 1;
