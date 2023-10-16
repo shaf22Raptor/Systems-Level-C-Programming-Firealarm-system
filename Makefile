@@ -1,1 +1,17 @@
+CC=gcc
 CFLAGS=-pthread -Wall
+LDFLAGS=-pthread
+
+all: cardreader
+
+cardreader: cardreader.o tcp_communication.o
+	$(CC) $(CFLAGS) -o cardreader cardreader.o tcp_communication.o $(LDFLAGS)
+
+cardreader.o: cardreader.c tcp_communication.h
+	$(CC) $(CFLAGS) -c cardreader.c
+
+tcp_communication.o: tcp_communication.c tcp_communication.h
+	$(CC) $(CFLAGS) -c tcp_communication.c
+
+clean:
+	rm -f cardreader *.o

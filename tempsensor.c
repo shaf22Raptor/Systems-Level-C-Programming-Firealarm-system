@@ -73,8 +73,10 @@ int main(int argc, char **argv[]) {
         float currentTemp = shared->temperature;
         pthread_mutex_unlock(&shared->mutex);
         if (currentTemp != oldTemp || firstIteration == 1) {  // or if max update wait has passed since sensor last sent an update 
-           
+           // construct a struct that contains sensor's id, temp and current time and address list of only this sensor
+           // send datagram to each receiver
         }
+        
     }
 
     return 0;

@@ -11,10 +11,12 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+#include <tcp_communication.h>
+
 #define BUFFER_SIZE 16
 #define RECEIVED_BUFFER_SIZE 1024
 
-#include <tcp_communication.h>
+
 
 // Struct used for card reader shared memory as specified
 typedef struct {
