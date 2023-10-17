@@ -91,10 +91,45 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /**************************
-    Code to connect to overseer
-    **************************/
+    // Parse overseer address and port
+    char *overseer_ip = strtok(overseer_addr, ":");
+    char *overseer_port_str = strtok(NULL, ":");
+    if (!overseer_ip || !overseer_port_str) {
+        fprintf(stderr, "Error: Overseer address should be in the format ip:port\n");
+        return 1;
+    }
 
+    int overseer_port = atoi(overseer_port_str);
+    if (overseer_port == 0) {
+        fprintf(stderr, "Error: Invalid port number\n");
+        return 1;
+    }
+
+    struct sockaddr_in overseer_address;
+    memset(&overseer_address, 0, sizeof(overseer_address));
+    overseer_address.sin_family = AF_INET;
+
+    if (inet_pton(AF_INET, overseer_ip, &overseer_address.sin_addr) <= 0) {
+        fprintf(stderr, "Invalid overseer IP address\n");
+        return 1;
+    }
+    overseer_address.sin_port = htons(overseer_port);
+
+    // Create a socket for TCP connection to overseer
+    int overseer_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (overseer_sockfd < 0) {
+        perror("Cannot create socket");
+        return 1;
+    }
+
+    // Connect to overseer
+    if (connect(overseer_sockfd, (struct sockaddr*)&overseer_address, sizeof(overseer_address)) < 0) {
+        perror("Connection to overseer failed");
+        close(overseer_sockfd);
+        return 1;
+    }
+
+    printf("Connected to overseer\n");
     // Main loop
     while (1) {
         char buffer[BUFFER_SIZE];

@@ -1,3 +1,9 @@
+/* 
+ * This file implements a door controller for safety-critical applications.
+ * The controller manages door state and communicates with an overseer program.
+ * Safety-critical compliance deviations and justifications (if any) should be documented here.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
