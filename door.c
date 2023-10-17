@@ -12,9 +12,9 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-// Shared memory structure
+/* Shared memory structure */
 typedef struct {
-    char status; // 'O', 'C', 'o', 'c'
+    char status; /* 'O', 'C', 'o', 'c' */
     pthread_mutex_t mutex;
     pthread_cond_t cond_start;
     pthread_cond_t cond_end;
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    // Initialization
+    /* Initialization */
     int id = atoi(argv[1]);
     char *addr_port = argv[2];
     char *config = argv[3];
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     bind(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
     listen(sockfd, 10);
 
-    // Shared memory initialization
+    /* Shared memory initialization */
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
     if (shm_fd == -1) {
         perror("shm_open()");
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     shm_door *shared = (shm_door *)(shm + shm_offset);
     shared->status = 'C';
 
-    // Connect to overseer and send initialization message
+    /* Connect to overseer and send initialization message */
     struct sockaddr_in overseer_addr;
     memset(&overseer_addr, 0, sizeof(overseer_addr));
     overseer_addr.sin_family = AF_INET;
@@ -110,7 +110,8 @@ int main(int argc, char **argv) {
         printf("Connected to overseer at IP: %s, Port: %d\n", overseer_ip, overseer_port); // Success case
     }
 
-    // Send an initialization message to the overseer
+
+    /* Send an initialization message to the overseer */
     char init_msg[100];
     snprintf(init_msg, sizeof(init_msg), "DOOR %d %s:%d %s#\n", id, inet_ntoa(servaddr.sin_addr), ntohs(servaddr.sin_port), config);
     ssize_t send_res = send(overseer_sock, init_msg, strlen(init_msg), 0);
@@ -123,7 +124,7 @@ int main(int argc, char **argv) {
         printf("Initialization message sent to overseer: %s\n", init_msg); // Log the sent message
     }
 
-    // Normal operation loop
+    /* Normal operation loop */
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
@@ -131,7 +132,7 @@ int main(int argc, char **argv) {
         if (client < 0) {
             perror("accept failed");
             printf("Error occurred while accepting connection. sockfd: %d\n", sockfd); // Log the socket descriptor
-            continue; // Skip further processing for this client
+            continue; /* Skip further processing for this client */
         }
 
         printf("Client connected\n"); // Added debug message
@@ -139,9 +140,9 @@ int main(int argc, char **argv) {
         char buffer[100];
         int bytes = recv(client, buffer, sizeof(buffer) - 1, 0);
         if (bytes <= 0) {
-            // Handle errors or connection closure
+            /* Handle errors or connection closure */
             if (bytes == 0) {
-                // Connection closed
+                /* Connection closed */
                 printf("Client disconnected\n");
             } else {
                 perror("recv failed");
@@ -149,49 +150,49 @@ int main(int argc, char **argv) {
             close(client);
             continue;
         }
-        buffer[bytes] = '\0'; // Null-terminate the string
+        buffer[bytes] = '\0'; /* Null-terminate the string */
 
         printf("Received message: %s\n", buffer); // Added debug message
 
-        // Lock the mutex before checking or changing the status
+        /* Lock the mutex before checking or changing the status */
         pthread_mutex_lock(&shared->mutex);
 
 
         if (strcmp(buffer, "OPEN#") == 0) {
-            // Implement the logic for opening the door based on the received message
+            /* Implement the logic for opening the door based on the received message */
             if (shared->status == 'O') {
                 printf("Door is already open\n"); // Debug message
                 send_msg(client, "ALREADY#\n");
             } else {
                 printf("Opening door...\n"); // Debug message
-                 // Inform the overseer that the door is opening
+                /* Inform the overseer that the door is opening */
                 send_msg(overseer_sock, "OPENING#\n");
 
-                // Start the door opening process
+                /* Start the door opening process */
                 shared->status = 'o';
                 pthread_cond_signal(&shared->cond_start);
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
 
-                // After the door has opened, update the status and notify the client and overseer
+                /* After the door has opened, update the status and notify the client and overseer */
                 shared->status = 'O';
                 send_msg(client, "OPENED#\n");
             }
         } else if (strcmp(buffer, "CLOSE#") == 0) {
-            // Implement the logic for closing the door based on the received message
+            /* Implement the logic for closing the door based on the received message */
             if (shared->status == 'C') {
                 printf("Door is already closed\n"); // Debug message
                 send_msg(client, "ALREADY#\n");
             } else {
                 printf("Closing door...\n"); // Debug message
-                // Inform the overseer that the door is closing
+                /* Inform the overseer that the door is closing */
                 send_msg(overseer_sock, "CLOSING#\n");
 
-                // Start the door closing process
+                /* Start the door closing process */
                 shared->status = 'c';
                 pthread_cond_signal(&shared->cond_start);
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
 
-                // After the door has closed, update the status and notify the client and overseer
+                /* After the door has closed, update the status and notify the client and overseer */
                 shared->status = 'C';
                 send_msg(client, "CLOSED#\n");
             }
@@ -200,15 +201,15 @@ int main(int argc, char **argv) {
             if (shared->status == 'C' || shared->status == 'c') {
                 printf("Emergency opening...\n"); // Debug message
 
-                // Inform the overseer that there is an emergency opening
+                /* Inform the overseer that there is an emergency opening */
                 send_msg(overseer_sock, "EMERGENCY_OPENING#\n");
 
-                // Start the door opening process
+                /* Start the door opening process */
                 shared->status = 'o';
                 pthread_cond_signal(&shared->cond_start);
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
 
-                // After the door has opened, update the status and notify the client and overseer
+                /* After the door has opened, update the status and notify the client and overseer */
                 shared->status = 'O';
                 send_msg(client, "EMERGENCY_OPENED#\n");
             } else {
@@ -217,20 +218,20 @@ int main(int argc, char **argv) {
             }
         }
 
-        // Handling secure close command
+        /* Handling secure close command */
         else if (strcmp(buffer, "CLOSE_SECURE#") == 0) {
             if (shared->status == 'O' || shared->status == 'o') {
                 printf("Secure closing...\n"); // Debug message
 
-                // Inform the overseer that there is a secure closing
+                /* Inform the overseer that there is a secure closing */
                 send_msg(overseer_sock, "SECURE_CLOSING#\n");
 
-                // Start the door closing process
+                /* Start the door closing process */
                 shared->status = 'c';
                 pthread_cond_signal(&shared->cond_start);
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
 
-                // After the door has closed, update the status and notify the client and overseer
+                /* After the door has closed, update the status and notify the client and overseer */
                 shared->status = 'C';
                 send_msg(client, "SECURE_CLOSED#\n");
             } else {
