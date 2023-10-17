@@ -43,6 +43,7 @@ int main(int argc, char **argv)
     // Isolate port number from {ipAddress : port number}
     const char *portString= strstr(overseer_port, ":");
     int portNumber = atoi(portString + 1);
+    printf("Now beginning connection to overseer\n");
 
     /**************************
     Code to connect to overseer
@@ -88,6 +89,7 @@ int main(int argc, char **argv)
 
     // initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
+   // printf("\n\nshm_open executed\n");
 
     // handle failed shm_open
     if (shm_fd == -1) {
@@ -101,33 +103,45 @@ int main(int argc, char **argv)
         perror("fstat()");
         exit(1);
     }
-    printf("Shared memory file size: %ld\n", shm_stat.st_size);
+ //   printf("Shared memory file size: %ld\n", shm_stat.st_size);
 
     // mmap 
     char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+   // printf("\nmmap done, but not checked\n");
 
     if (shm == MAP_FAILED) {
         perror("mmap()");
         exit(1);
     }
+   // printf("\nmmap check done \n");
     // cast memory offset onto card_reader
     shm_cardreader *shared = (shm_cardreader *)(shm + shm_offset);
+    //printf("\nshm cast done\n");
 
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
+    //printf("\n mutex lock done\n");
 
     for(;;) {
+        printf("\nentered infinite loop\n");
         if (shared->scanned[0] != '\0') {
-            char buf[BUFFER_SIZE+1];
+            printf("\n\nentered the if statement\n\n");
+          //  char buf[BUFFER_SIZE+1];
             char scannedMessage[50];
-            memcpy(buf, shared->scanned,16);
-            buf[16] = '\0';
+          //  memcpy(buf, shared->scanned,16);
+           // printf("\nmemcpy done\n");
+          //  buf[16] = '\0';
 
             // SEND SCANNED DATA
-            sprintf(scannedMessage, sizeof(scannedMessage), "CARDREADER %d SCANNED %s#", id, shared->scanned);
+            printf("%s", shared->scanned);
+            printf("\nattempting to do sprintf\n");
+            sprintf(scannedMessage, "CARDREADER %d SCANNED %s#", id, shared->scanned);
+            printf("\nsprintf done\n");
             int sendMessage = sendData(sockfd, scannedMessage);
+            printf("\nmessage sent\n");
             if(sendMessage == 1) {
                 perror("send()");
+                exit(1);
             }
 
             /*****************************************
@@ -151,7 +165,7 @@ int main(int argc, char **argv)
                     shared->response = 'N';
                 }
             }
-            printf("Scanned %s\n", buf);
+            //printf("Scanned %s\n", buf);
             shared->response = 'Y';
             pthread_cond_signal(&shared->response_cond);
         }
