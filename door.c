@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 // Shared memory structure
 typedef struct {
@@ -72,33 +73,56 @@ int main(int argc, char **argv) {
     shared->status = 'C';
 
     // Connect to overseer and send initialization message
-    struct sockaddr_in overseer;
-    overseer.sin_family = AF_INET;
-    token = strtok(overseer_addr_port, ":");
-    overseer.sin_addr.s_addr = inet_addr(token);
-    token = strtok(NULL, ":");
-    overseer.sin_port = htons(atoi(token));
+    struct sockaddr_in overseer_addr;
+    memset(&overseer_addr, 0, sizeof(overseer_addr));
+    overseer_addr.sin_family = AF_INET;
 
-    int o_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (o_sock < 0) {
-        perror("socket creation failed");
+    char *overseer_ip = strtok(overseer_addr_port, ":");
+    char *overseer_port_str = strtok(NULL, ":");
+    if (!overseer_ip || !overseer_port_str) {
+        fprintf(stderr, "Error: Overseer address should be in the format ip:port\n");
         exit(EXIT_FAILURE);
     }
 
-    if (connect(o_sock, (struct sockaddr*)&overseer, sizeof(overseer)) < 0) {
-        perror("Failed to connect to overseer");
-        close(o_sock);
+    int overseer_port = atoi(overseer_port_str);
+    if (overseer_port == 0) {
+        fprintf(stderr, "Error: Invalid port number\n");
         exit(EXIT_FAILURE);
     }
 
+    if (inet_pton(AF_INET, overseer_ip, &overseer_addr.sin_addr) <= 0) {
+        fprintf(stderr, "Invalid overseer IP address\n");
+        exit(EXIT_FAILURE);
+    }
+    overseer_addr.sin_port = htons(overseer_port);
+
+    int overseer_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (overseer_sock < 0) {
+        perror("Cannot create socket");
+        exit(EXIT_FAILURE);
+    }
+
+    if (connect(overseer_sock, (struct sockaddr*)&overseer_addr, sizeof(overseer_addr)) < 0) {
+        perror("Connection to overseer failed");
+        close(overseer_sock);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Connected to overseer successfully.\n");
+
+    // Send an initialization message to the overseer
     char init_msg[100];
-    snprintf(init_msg, sizeof(init_msg), "DOOR %d %s %s#\n", id, addr_port, config);
-    if (send(o_sock, init_msg, strlen(init_msg), 0) < 0) {
+    snprintf(init_msg, sizeof(init_msg), "DOOR %d INIT %s#\n", id, config); // Modify as per your protocol
+    ssize_t send_res = send(overseer_sock, init_msg, strlen(init_msg), 0);
+    if (send_res < 0) {
         perror("Failed to send initialization message");
-        close(o_sock);
+        close(overseer_sock);
         exit(EXIT_FAILURE);
     }
 
+    printf("Initialization message sent to overseer.\n");
+
+        
     // Normal operation loop
     while (1) {
         struct sockaddr_in client_addr;
@@ -156,7 +180,7 @@ int main(int argc, char **argv) {
         close(client);
     }
 
-    // close(o_sock);
+    close(overseer_sock);
     close(shm_fd);
     return 0;
 }

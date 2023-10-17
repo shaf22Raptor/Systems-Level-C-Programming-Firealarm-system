@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-pthread -Wall
-LDFLAGS=-pthread
+LDFLAGS=-pthread -lrt
 
 all: cardreader door
 
