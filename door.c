@@ -108,11 +108,9 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Connected to overseer successfully.\n");
-
     // Send an initialization message to the overseer
     char init_msg[100];
-    snprintf(init_msg, sizeof(init_msg), "DOOR %d INIT %s#\n", id, config); // Modify as per your protocol
+    snprintf(init_msg, sizeof(init_msg), "DOOR %d %s:%d %s#\n", id, inet_ntoa(servaddr.sin_addr), ntohs(servaddr.sin_port), config);
     ssize_t send_res = send(overseer_sock, init_msg, strlen(init_msg), 0);
     if (send_res < 0) {
         perror("Failed to send initialization message");
@@ -120,9 +118,6 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Initialization message sent to overseer.\n");
-
-        
     // Normal operation loop
     while (1) {
         struct sockaddr_in client_addr;
@@ -151,6 +146,7 @@ int main(int argc, char **argv) {
         // Lock the mutex before checking or changing the status
         pthread_mutex_lock(&shared->mutex);
 
+
         if (strcmp(buffer, "OPEN#") == 0) {
             // Implement the logic for opening the door based on the received message
             if (shared->status == 'O') {
@@ -161,6 +157,7 @@ int main(int argc, char **argv) {
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
                 shared->status = 'O';
                 send_msg(client, "OPENED#\n");
+                send_msg(overseer_sock, "OPENING#\n");
             }
         } else if (strcmp(buffer, "CLOSE#") == 0) {
             // Implement the logic for closing the door based on the received message
@@ -172,6 +169,7 @@ int main(int argc, char **argv) {
                 pthread_cond_wait(&shared->cond_end, &shared->mutex);
                 shared->status = 'C';
                 send_msg(client, "CLOSED#\n");
+                send_msg(overseer_sock, "CLOSING#\n");
             }
         }
         // Add logic for other commands as needed
