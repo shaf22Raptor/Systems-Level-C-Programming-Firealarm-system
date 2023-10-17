@@ -13,7 +13,6 @@ int createSocket() {
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);   // Create socket for client and corresponding error handling
     if (sockfd == -1) { 
         perror("\nsocket()\n");
-        return 1;
     }
 
     return sockfd;
@@ -29,21 +28,19 @@ int createSocket() {
     addr->sin_port = htons(server_port);
 }
 */
-int establishConnection(int socket, struct sockaddr_in *serverAddr, char *programName) {
+int establishConnection(int socket, struct sockaddr_in serverAddr, char *programName) {
     int connection_status = connect(socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
     if (connection_status == -1) {
-        printf("%s Error: Connection to the server failed\n", programName);
-        return 1;
+        printf("Error: Connection to the server failed for %s\n", programName);
     }
     return connection_status;
 }
 
-int sendData(int socket, const char *data) {
+int sendData(int socket, char *data) {
     // Send data
     int sent = send(socket, data, strlen(data), 0);
     if (sent == -1) {
         printf("Error: Failed to send data\n");
-        return 1;
     }
 
     return sent;
@@ -54,7 +51,6 @@ int receiveData(int socket, char *buffer) {
     int dataReceived = recv(socket, buffer, sizeof(buffer), 0);
     if (dataReceived == -1) {
         printf("Error: receive data failed");
-        return 1;
     }
     
     return dataReceived;

@@ -36,27 +36,29 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: {id} {wait time (in microseconds)} {shared memory path} {shared memory offset} {overseer address:port}");
         exit(1);
     }
-
     // intialise parameters for system by converting from char[] to int when necessary
     int id = atoi(argv[1]);
     int waitTime = atoi(argv[2]);
     const char *shm_path = argv[3];
     off_t shm_offset = (off_t)atoi(argv[4]);
     const char *overseer_port = argv[5]; // temporary variable type
-
+ 
     // Isolate port number from {ipAddress : port number}
-    char *portString= strstr(&overseer_port, ":");
+    const char *portString= strstr(overseer_port, ":");
     int portNumber = atoi(portString + 1);
 
+  
     /**************************
     Code to connect to overseer
     **************************/
      // Create socket
     int sockfd = createSocket();
-    if (sockfd == 1) {
+    if (sockfd == -1) {
+        printf("socket creation failed");
         exit(1);
     }
- 
+
+
     // Define server address and port
     struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));
@@ -69,33 +71,39 @@ int main(int argc, char **argv)
     //configureServerAddress(&serverAddr, "127.0.0.1", *overseer_port);
 
     // Establish connection and corresponding error handling
-    int connection_status = establishConnection(sockfd, &serverAddr, programName);
-    if (connection_status == 1) {
-        printf("cardreader has failed");
+    printf("Establishing connection now");
+    int connection_status = establishConnection(sockfd, serverAddr, programName);
+    if (connection_status == -1) {
+        printf("cardreader has failed\n");
         exit(1);
     }
 
     // Initialisation message to overseer
-    char *helloMessage;
-    snprintf(helloMessage, sizeof(helloMessage), "CARDREADER %s HELLO#", id);
-    
+    printf("making initialisation message");
+    char helloMessage[50];
+    sprintf(helloMessage, "CARDREADER %d HELLO#", id);
+
+    printf("message is being sent now...");
     int sent = sendData(sockfd, helloMessage);
-    if (sent == 1) {
+    if (sent == -1) {
         exit(1);
     }
+    
 
     /*********************************************
     Code to connect to share memory with simulator
     *********************************************/
-
+    printf("beginning shm initialisation");
     // initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
+    printf("shm initialised");
 
     // handle failed shm_open
     if (shm_fd == -1) {
         perror("shm_open()");
         exit(1);
     }
+    printf("shm did not fail");
 
     // Obtain statistics related to shm. Intended to find size of shm.
     struct stat shm_stat;
@@ -104,24 +112,28 @@ int main(int argc, char **argv)
         perror("fstat()");
         exit(1);
     }
-
-    printf("Shared memory file size: %ld\n", shm_stat.st_size);
+    printf("successfully obtained stats related to shm");
 
     // mmap 
     char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    printf("created mmap for shm");
 
     if (shm == MAP_FAILED) {
         perror("mmap()");
         exit(1);
     }
+    printf("mmap did not fail");
 
     // cast memory offset onto card_reader
     shm_cardreader *shared = (shm_cardreader *)(shm + shm_offset);
+    printf("memory offset successfully casted onto card_reader");
 
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
+    printf("mutex lock succeeded");
 
     for(;;) {
+        printf("Entered into infinite loop");
         if (shared->scanned[0] != '\0') {
             char buf[BUFFER_SIZE+1];
             char scannedMessage[50];
@@ -129,8 +141,8 @@ int main(int argc, char **argv)
             buf[16] = '\0';
 
             // SEND SCANNED DATA
-            snprintf(scannedMessage, sizeof(scannedMessage), "CARDREADER %d SCANNED %s#", id, shared->scanned);
-            int sendMessage = send(sockfd, scannedMessage, strlen(scannedMessage), 0);
+            sprintf(scannedMessage, sizeof(scannedMessage), "CARDREADER %d SCANNED %s#", id, shared->scanned);
+            int sendMessage = sendData(sockfd, scannedMessage);
             if(sendMessage == -1) {
                 perror("send()");
             }
