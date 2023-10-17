@@ -10,7 +10,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-
 #include "tcp_communication.h"
 
 #define BUFFER_SIZE 16
@@ -23,10 +22,8 @@ typedef struct {
     char scanned[BUFFER_SIZE];
     pthread_mutex_t mutex;
     pthread_cond_t scanned_cond;
-
     char response; // 'Y' or 'N' (or '\0' at first)
     pthread_cond_t response_cond;
-
 } shm_cardreader;
 
 int main(int argc, char **argv) 
@@ -42,22 +39,20 @@ int main(int argc, char **argv)
     const char *shm_path = argv[3];
     off_t shm_offset = (off_t)atoi(argv[4]);
     const char *overseer_port = argv[5]; // temporary variable type
- 
+
     // Isolate port number from {ipAddress : port number}
     const char *portString= strstr(overseer_port, ":");
     int portNumber = atoi(portString + 1);
 
-  
     /**************************
     Code to connect to overseer
     **************************/
      // Create socket
     int sockfd = createSocket();
-    if (sockfd == -1) {
+    if (sockfd == 1) {
         printf("socket creation failed");
         exit(1);
     }
-
 
     // Define server address and port
     struct sockaddr_in serverAddr;
@@ -66,74 +61,62 @@ int main(int argc, char **argv)
         perror("inet_pton()");
         exit(1);
     }
+
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(portNumber);
+
     //configureServerAddress(&serverAddr, "127.0.0.1", *overseer_port);
 
     // Establish connection and corresponding error handling
-    printf("Establishing connection now");
     int connection_status = establishConnection(sockfd, serverAddr, programName);
-    if (connection_status == -1) {
+    if (connection_status == 1) {
         printf("cardreader has failed\n");
         exit(1);
     }
 
     // Initialisation message to overseer
-    printf("making initialisation message");
     char helloMessage[50];
     sprintf(helloMessage, "CARDREADER %d HELLO#", id);
-
-    printf("message is being sent now...");
     int sent = sendData(sockfd, helloMessage);
-    if (sent == -1) {
+    if (sent == 1) {
         exit(1);
     }
-    
 
     /*********************************************
     Code to connect to share memory with simulator
     *********************************************/
-    printf("beginning shm initialisation");
+
     // initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
-    printf("shm initialised");
 
     // handle failed shm_open
     if (shm_fd == -1) {
         perror("shm_open()");
         exit(1);
     }
-    printf("shm did not fail");
 
     // Obtain statistics related to shm. Intended to find size of shm.
     struct stat shm_stat;
-
     if (fstat(shm_fd, &shm_stat) == -1) {
         perror("fstat()");
         exit(1);
     }
-    printf("successfully obtained stats related to shm");
+    printf("Shared memory file size: %ld\n", shm_stat.st_size);
 
     // mmap 
     char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    printf("created mmap for shm");
 
     if (shm == MAP_FAILED) {
         perror("mmap()");
         exit(1);
     }
-    printf("mmap did not fail");
-
     // cast memory offset onto card_reader
     shm_cardreader *shared = (shm_cardreader *)(shm + shm_offset);
-    printf("memory offset successfully casted onto card_reader");
 
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
-    printf("mutex lock succeeded");
 
     for(;;) {
-        printf("Entered into infinite loop");
         if (shared->scanned[0] != '\0') {
             char buf[BUFFER_SIZE+1];
             char scannedMessage[50];
@@ -143,7 +126,7 @@ int main(int argc, char **argv)
             // SEND SCANNED DATA
             sprintf(scannedMessage, sizeof(scannedMessage), "CARDREADER %d SCANNED %s#", id, shared->scanned);
             int sendMessage = sendData(sockfd, scannedMessage);
-            if(sendMessage == -1) {
+            if(sendMessage == 1) {
                 perror("send()");
             }
 
@@ -199,7 +182,7 @@ int main(int argc, char **argv)
         perror("pthread_cond_destroy");
         exit(1);
     }
-    
+
     if (munmap(shm, shm_stat.st_size) == -1) {
         perror("munmap()");
     }
