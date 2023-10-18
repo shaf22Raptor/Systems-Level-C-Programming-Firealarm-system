@@ -27,15 +27,18 @@ typedef struct {
 } shm_door;
 
 void send_msg(int sockfd, const char* msg) {
+    printf("Debug: Sending message to sockfd: %d\n", sockfd); // Debug message
     send(sockfd, msg, strlen(msg), 0);
 }
 
 int main(int argc, char **argv) {
+    printf("Debug: Starting program...\n"); // Debug message
     if (argc != 7) {
         fprintf(stderr, "Usage: door {id} {address:port} {FAIL_SAFE | FAIL_SECURE} {shared memory path} {shared memory offset} {overseer address:port}\n");
         exit(1);
     }
 
+    printf("Initialsing");
     /* Initialization */
     int id = atoi(argv[1]);
     char *addr_port = argv[2];
@@ -44,7 +47,9 @@ int main(int argc, char **argv) {
     int shm_offset = atoi(argv[5]);
     char *overseer_addr_port = argv[6];
 
+    printf("Debug: Creating socket...\n"); // Debug message
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    printf("Debug: Configuring socket...\n"); // Debug message
     struct sockaddr_in servaddr;
     servaddr.sin_family = AF_INET;
     char *token = strtok(addr_port, ":");
@@ -55,6 +60,7 @@ int main(int argc, char **argv) {
     bind(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
     listen(sockfd, 10);
 
+    printf("Debug: Initializing shared memory...\n"); // Debug message
     /* Shared memory initialization */
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
     if (shm_fd == -1) {
@@ -77,6 +83,7 @@ int main(int argc, char **argv) {
     shm_door *shared = (shm_door *)(shm + shm_offset);
     shared->status = 'C';
 
+    printf("Debug: Connecting to overseer...\n"); // Debug message
     /* Connect to overseer and send initialization message */
     struct sockaddr_in overseer_addr;
     memset(&overseer_addr, 0, sizeof(overseer_addr));
@@ -116,7 +123,7 @@ int main(int argc, char **argv) {
         printf("Connected to overseer at IP: %s, Port: %d\n", overseer_ip, overseer_port); // Success case
     }
 
-
+    printf("Debug: Sending initialization message to the overseer...\n"); // Debug message
     /* Send an initialization message to the overseer */
     char init_msg[100];
     snprintf(init_msg, sizeof(init_msg), "DOOR %d %s:%d %s#\n", id, inet_ntoa(servaddr.sin_addr), ntohs(servaddr.sin_port), config);
@@ -130,8 +137,13 @@ int main(int argc, char **argv) {
         printf("Initialization message sent to overseer: %s\n", init_msg); // Log the sent message
     }
 
+
+    printf("start loop");
+    printf("Debug: Entering normal operation loop...\n"); // Debug message
     /* Normal operation loop */
     while (1) {
+        printf("Debug: Waiting for a client to connect...\n"); // Debug message
+
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
         int client = accept(sockfd, (struct sockaddr*)&client_addr, &client_len);
@@ -158,10 +170,17 @@ int main(int argc, char **argv) {
         }
         buffer[bytes] = '\0'; /* Null-terminate the string */
 
+        printf("Debug: Handling client requests...\n"); // Debug message
         printf("Received message: %s\n", buffer); // Added debug message
 
+        printf("Debug: Acquiring mutex lock...\n"); // Debug message
         /* Lock the mutex before checking or changing the status */
         pthread_mutex_lock(&shared->mutex);
+
+
+        /* ADD CODE FOR DENIED BECAUSE RIGHT NOW ITS NOT RELEASING THE MUTEX FOR THE DENISED CLIENT AND MOVING ST
+        STRAIGHT TO THE ALLOWED USER AND THUS THEYRE GETTING REFUSED
+        */
 
 
         if (strcmp(buffer, "OPEN#") == 0) {
@@ -204,6 +223,7 @@ int main(int argc, char **argv) {
             }
         }
         else if (strcmp(buffer, "OPEN_EMERG#") == 0) {
+            printf("Open Emerg Turns on\n"); // debug message
             if (shared->status == 'C' || shared->status == 'c') {
                 printf("Emergency opening...\n"); // Debug message
 
@@ -226,6 +246,8 @@ int main(int argc, char **argv) {
 
         /* Handling secure close command */
         else if (strcmp(buffer, "CLOSE_SECURE#") == 0) {
+            printf("Close Secure Turns on\n"); // debug message
+
             if (shared->status == 'O' || shared->status == 'o') {
                 printf("Secure closing...\n"); // Debug message
 
@@ -245,9 +267,15 @@ int main(int argc, char **argv) {
                 send_msg(client, "ALREADY#\n");
             }
         }
+        
+        printf("Debug: Releasing mutex lock...\n"); // Debug message
         pthread_mutex_unlock(&shared->mutex);
+        
+        printf("Debug: Closing client connection...\n"); // Debug message
         close(client);
     }
+    
+    printf("Debug: Cleaning up resources...\n"); // Debug message
 
     close(overseer_sock);
     close(shm_fd);
