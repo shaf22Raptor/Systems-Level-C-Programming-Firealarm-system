@@ -180,24 +180,20 @@ int main(int argc, char **argv)
             // Logic to process data from server
             else {
                 receiveBuf[messageReceived] = '\0'; // Null terminate received data
-                if (receiveBuf[0] == 'Y') {
-                    shared->response = 'test';
+                if (strcmp(receiveBuf, "ALLOWED#") == 0) {
+                    shared->response = 'Y';
                 }
                 else {
-                    shared->response = 'testN';
+                    shared->response = 'N';
                 }
             }
-            //printf("Scanned %s\n", buf);
-            shared->response = 'test';
             pthread_cond_signal(&shared->response_cond);
 
             if (shutdown(sockfd, SHUT_RDWR) < 0) {
                 perror("Error in shutting down");
             return 1; // Return an error code if shutdown fails
             }
-
             close(sockfd2);
-
         }
         pthread_cond_wait(&shared->scanned_cond, &shared->mutex);
     }
