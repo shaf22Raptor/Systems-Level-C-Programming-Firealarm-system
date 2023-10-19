@@ -1,7 +1,8 @@
 /* 
- * This file implements a door controller for safety-critical applications.
- * The controller manages door state and communicates with an overseer program.
- */
+ * This is the main executable file for a door controller in safety-critical applications.
+ * It maintains the door state and ensures communication with an overseer program.
+ * The controller can handle commands to open or close the door and responds with the door's current state.
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,19 +26,18 @@ typedef struct {
     pthread_cond_t cond_end;
 } shm_door;
 
+/* Function to send a message over a socket */
 void send_msg(int sockfd, const char* msg) {
-    printf("Debug: Sending message to sockfd: %d\n", sockfd); // Debug message
     send(sockfd, msg, strlen(msg), 0);
 }
 
 int main(int argc, char **argv) {
-    printf("Debug: Starting program\n"); // Debug message
     if (argc != 7) {
+        /* Incorrect number of arguments */
         fprintf(stderr, "Usage: door {id} {address:port} {FAIL_SAFE | FAIL_SECURE} {shared memory path} {shared memory offset} {overseer address:port}\n");
         exit(1);
     }
 
-    printf("Initialsing");
     /* Initialization */
     int id = atoi(argv[1]);
     char *addr_port = argv[2];
@@ -46,23 +46,22 @@ int main(int argc, char **argv) {
     int shm_offset = atoi(argv[5]);
     char *overseer_addr_port = argv[6];
 
-    printf("Debug: Creating socket\n"); // Debug message
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    printf("Debug: Configuring socket\n"); // Debug message
+    /* Socket setup for the door controller's server */
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);   /* Create a socket for communication */
     struct sockaddr_in servaddr;
     servaddr.sin_family = AF_INET;
     char *token = strtok(addr_port, ":");
     servaddr.sin_addr.s_addr = inet_addr(token);
     token = strtok(NULL, ":");
-    servaddr.sin_port = htons(atoi(token));
+    servaddr.sin_port = htons(atoi(token));         /* Assign port to this socket */
 
+    /* Binding the socket to the server address */
     if (bind(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
     listen(sockfd, 10);
 
-    printf("Debug: Initializing shared memory\n"); // Debug message
     /* Shared memory initialization */
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
     if (shm_fd == -1) {
@@ -70,27 +69,28 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    struct stat shm_stat;
+    struct stat shm_stat; /* To obtain file size */
     if (fstat(shm_fd, &shm_stat) == -1) {
         perror("fstat()");
         exit(1);
     }
 
+    /* Map the shared memory in the address space of the process */
     char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (shm == MAP_FAILED) {
         perror("mmap()");
         exit(1);
     }
 
-    shm_door *shared = (shm_door *)(shm + shm_offset);
-    shared->status = 'C';
+    shm_door *shared = (shm_door *)(shm + shm_offset);  /* Pointer to the shared structure */
+    shared->status = 'C';                               /* Initially, the door is considered closed */
 
-    printf("Debug: Connecting to overseer\n"); // Debug message
     /* Connect to overseer and send initialization message */
     struct sockaddr_in overseer_addr;
     memset(&overseer_addr, 0, sizeof(overseer_addr));
     overseer_addr.sin_family = AF_INET;
 
+    /* Parsing overseer IP address and port */
     char *overseer_ip = strtok(overseer_addr_port, ":");
     char *overseer_port_str = strtok(NULL, ":");
     if (!overseer_ip || !overseer_port_str) {
@@ -110,6 +110,7 @@ int main(int argc, char **argv) {
     }
     overseer_addr.sin_port = htons(overseer_port);
 
+    /* Communication setup with the overseer */
     int overseer_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (overseer_sock < 0) {
         perror("Cannot create socket");
@@ -118,47 +119,34 @@ int main(int argc, char **argv) {
 
     if (connect(overseer_sock, (struct sockaddr*)&overseer_addr, sizeof(overseer_addr)) < 0) {
         perror("Connection to overseer failed");
-        printf("Failed to connect to overseer at IP: %s, Port: %d\n", overseer_ip, overseer_port); // Log IP and port
         close(overseer_sock);
         exit(EXIT_FAILURE);
-    } else {
-        printf("Connected to overseer at IP: %s, Port: %d\n", overseer_ip, overseer_port); // Success case
     }
 
-    printf("Debug: Sending initialization message to the overseer\n"); // Debug message
     /* Send an initialization message to the overseer */
     char init_msg[100];
     snprintf(init_msg, sizeof(init_msg), "DOOR %d %s:%d %s#\n", id, inet_ntoa(servaddr.sin_addr), ntohs(servaddr.sin_port), config);
     ssize_t send_res = send(overseer_sock, init_msg, strlen(init_msg), 0);
     if (send_res < 0) {
         perror("Failed to send initialization message");
-        printf("Error occurred while sending message to overseer. Message: %s\n", init_msg); // Log the message content
         close(overseer_sock);
         exit(EXIT_FAILURE);
-    } else {
-        printf("Initialization message sent to overseer: %s\n", init_msg); // Log the sent message
-    }
+    } 
 
-
-    printf("start loop");
-    printf("Debug: Entering normal operation loop\n"); // Debug message
-    /* Normal operation loop */
+    /* Main operational loop starts */
     while (1) {
-        printf("Debug: Waiting for a client to connect\n"); // Debug message
-
+        /* Accepting a client connection */
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
         int client = accept(sockfd, (struct sockaddr*)&client_addr, &client_len);
         if (client < 0) {
             perror("accept failed");
-            printf("Error occurred while accepting connection. sockfd: %d\n", sockfd); // Log the socket descriptor
-            continue; /* Skip further processing for this client */
+            printf("Error occurred while accepting connection. sockfd: %d\n", sockfd);  // Log the socket descriptor
+            continue;                                                                   /* Skip further processing for this client */
         }
 
-        printf("Client connected\n"); // Added debug message
-
-        char buffer[100];
-        int bytes = recv(client, buffer, sizeof(buffer) - 1, 0);
+    char buffer[100];                                               /* Buffer to store client messages */
+        int bytes = recv(client, buffer, sizeof(buffer) - 1, 0);    /* Receive data from the client socket */
         if (bytes <= 0) {
             /* Handle errors or connection closure */
             if (bytes == 0) {
@@ -172,20 +160,18 @@ int main(int argc, char **argv) {
         }
         buffer[bytes] = '\0'; /* Null-terminate the string */
 
-        printf("Debug: Handling client requests\n"); // Debug message
-        printf("Received message: %s\n", buffer); // Added debug message
+        /* Lock the mutex before accessing the shared status */
+        pthread_mutex_lock(&shared->mutex);
+        char current_status = shared->status; 
+        pthread_mutex_unlock(&shared->mutex);
 
-        printf("Debug: Acquiring mutex lock\n"); // Debug message
-        // /* Lock the mutex before checking or changing the status */
-        // pthread_mutex_lock(&shared->mutex);
-
-        // Handle received commands with safer synchronization.
+        /* Processing client commands and preparing a response */
         char response[100]; // Buffer to hold responses to send back.
         if (strncmp(buffer, "STATE#", 6) == 0) {
             /* Query door state */
-            pthread_mutex_lock(&shared->mutex); // Ensure thread-safe access to shared data.
+            pthread_mutex_lock(&shared->mutex);                 // Ensure thread-safe access to shared data.
             snprintf(response, sizeof(response), "STATE %c#\n", shared->status);
-            pthread_mutex_unlock(&shared->mutex); // Always unlock the mutex after.
+            pthread_mutex_unlock(&shared->mutex);               // Always unlock the mutex after.
         } else if (strncmp(buffer, "OPEN#", 5) == 0) {
             /* Open door */
             pthread_mutex_lock(&shared->mutex);
@@ -198,23 +184,55 @@ int main(int argc, char **argv) {
             shared->status = 'C';
             strcpy(response, "CLOSING#\n");
             pthread_mutex_unlock(&shared->mutex);
+        } else if (strncmp(buffer, "OPEN_EMERG#", 11) == 0) {
+            /* Emergency open command */
+            if (shared->status == 'C' || shared->status == 'c') {  // If door is closing or closed
+                pthread_mutex_lock(&shared->mutex);
+
+                shared->status = 'o';  // Set status to opening
+                pthread_cond_signal(&shared->cond_start);  // Signal condition variable for start
+
+                // Wait for the door to open (this is where actual door opening logic would go in real implementation)
+                while (shared->status != 'O') {
+                    pthread_cond_wait(&shared->cond_end, &shared->mutex);  // Wait until fully opened
+                }
+
+                pthread_mutex_unlock(&shared->mutex);
+                strcpy(response, "EMERGENCY_MODE#\n");
+            } else if (shared->status == 'O') {
+                // Door is already open, so directly respond
+                strcpy(response, "EMERGENCY_MODE#\n");
+            }
+        } else if (strncmp(buffer, "CLOSE_SECURE#", 13) == 0) {
+            /* Security close command */
+            if (shared->status == 'O' || shared->status == 'o') {  // If door is opening or open
+                pthread_mutex_lock(&shared->mutex);
+
+                shared->status = 'c';  // Set status to closing
+                pthread_cond_signal(&shared->cond_start);  // Signal condition variable for start
+
+                // Wait for the door to close (this is where actual door closing logic would go in real implementation)
+                while (shared->status != 'C') {
+                    pthread_cond_wait(&shared->cond_end, &shared->mutex);  // Wait until fully closed
+                }
+
+                pthread_mutex_unlock(&shared->mutex);
+                strcpy(response, "SECURE_MODE#\n");
+            } else if (shared->status == 'C') {
+                // Door is already closed, so directly respond
+                strcpy(response, "SECURE_MODE#\n");
+            }   
         } else {
             fprintf(stderr, "Invalid command: %s\n", buffer);
-            strcpy(response, "ERROR Invalid command#\n"); // Response for an invalid command.
+            strcpy(response, "ERROR Invalid command#\n"); 
         }
 
-        // Send the response message to the client.
         send_msg(client, response);
-
-        // Close the client connection after handling the request.
-        close(client);
-        printf("Client disconnected\n"); // Confirmation message for monitoring.
-        
-        printf("Debug: Closing client connection\n"); // Debug message
+        /*Close the client connection after handling the request*/
         close(client);
     }
     
-    printf("Debug: Cleaning up resources\n"); // Debug message
+    /* Clean up resources */
     munmap(shm, shm_stat.st_size);
     close(overseer_sock);
     close(shm_fd);
