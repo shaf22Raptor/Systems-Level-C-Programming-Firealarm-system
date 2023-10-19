@@ -141,8 +141,8 @@ int main(int argc, char **argv) {
         int client = accept(sockfd, (struct sockaddr*)&client_addr, &client_len);
         if (client < 0) {
             perror("accept failed");
-            printf("Error occurred while accepting connection. sockfd: %d\n", sockfd);  // Log the socket descriptor
-            continue;                                                                   /* Skip further processing for this client */
+            printf("Error occurred while accepting connection. sockfd: %d\n", sockfd);  
+            continue;                                                                   
         }
 
     char buffer[100];                                               /* Buffer to store client messages */
@@ -169,9 +169,9 @@ int main(int argc, char **argv) {
         char response[100]; // Buffer to hold responses to send back.
         if (strncmp(buffer, "STATE#", 6) == 0) {
             /* Query door state */
-            pthread_mutex_lock(&shared->mutex);                 // Ensure thread-safe access to shared data.
+            pthread_mutex_lock(&shared->mutex);                 
             snprintf(response, sizeof(response), "STATE %c#\n", shared->status);
-            pthread_mutex_unlock(&shared->mutex);               // Always unlock the mutex after.
+            pthread_mutex_unlock(&shared->mutex);               
         } else if (strncmp(buffer, "OPEN#", 5) == 0) {
             /* Open door */
             pthread_mutex_lock(&shared->mutex);
@@ -185,44 +185,41 @@ int main(int argc, char **argv) {
             strcpy(response, "CLOSING#\n");
             pthread_mutex_unlock(&shared->mutex);
         } else if (strncmp(buffer, "OPEN_EMERG#", 11) == 0) {
-            /* Emergency open command */
-            if (shared->status == 'C' || shared->status == 'c') {  // If door is closing or closed
+            /* Emergency command to forcefully open the door */
+            if (shared->status == 'C' || shared->status == 'c') {  
                 pthread_mutex_lock(&shared->mutex);
 
-                shared->status = 'o';  // Set status to opening
-                pthread_cond_signal(&shared->cond_start);  // Signal condition variable for start
+                shared->status = 'o';  
+                pthread_cond_signal(&shared->cond_start);  
 
-                // Wait for the door to open (this is where actual door opening logic would go in real implementation)
                 while (shared->status != 'O') {
-                    pthread_cond_wait(&shared->cond_end, &shared->mutex);  // Wait until fully opened
+                    pthread_cond_wait(&shared->cond_end, &shared->mutex);  
                 }
 
                 pthread_mutex_unlock(&shared->mutex);
                 strcpy(response, "EMERGENCY_MODE#\n");
             } else if (shared->status == 'O') {
-                // Door is already open, so directly respond
                 strcpy(response, "EMERGENCY_MODE#\n");
             }
         } else if (strncmp(buffer, "CLOSE_SECURE#", 13) == 0) {
-            /* Security close command */
-            if (shared->status == 'O' || shared->status == 'o') {  // If door is opening or open
+            /* Command to close the door securely in response to a security protocol */
+            if (shared->status == 'O' || shared->status == 'o') {  
                 pthread_mutex_lock(&shared->mutex);
 
-                shared->status = 'c';  // Set status to closing
-                pthread_cond_signal(&shared->cond_start);  // Signal condition variable for start
+                shared->status = 'c';  
+                pthread_cond_signal(&shared->cond_start);  
 
-                // Wait for the door to close (this is where actual door closing logic would go in real implementation)
                 while (shared->status != 'C') {
-                    pthread_cond_wait(&shared->cond_end, &shared->mutex);  // Wait until fully closed
+                    pthread_cond_wait(&shared->cond_end, &shared->mutex); 
                 }
 
                 pthread_mutex_unlock(&shared->mutex);
                 strcpy(response, "SECURE_MODE#\n");
             } else if (shared->status == 'C') {
-                // Door is already closed, so directly respond
                 strcpy(response, "SECURE_MODE#\n");
             }   
         } else {
+            /* Handle unrecognized commands */
             fprintf(stderr, "Invalid command: %s\n", buffer);
             strcpy(response, "ERROR Invalid command#\n"); 
         }
