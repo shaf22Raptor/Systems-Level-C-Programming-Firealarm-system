@@ -43,7 +43,38 @@ int main(int argc, char **argv)
     // Isolate port number from {ipAddress : port number}
     const char *portString= strstr(overseer_port, ":");
     int portNumber = atoi(portString + 1);
-    printf("Now beginning connection to overseer\n");
+
+    /*********************************************
+    Code to connect to shared memory with simulator
+    *********************************************/
+
+    // initialise shm
+    int shm_fd = shm_open(shm_path, O_RDWR, 0);
+   // printf("\n\nshm_open executed\n");
+
+    // handle failed shm_open
+    if (shm_fd == -1) {
+        perror("shm_open()");
+        exit(1);
+    }
+
+    // Obtain statistics related to shm. Intended to find size of shm.
+    struct stat shm_stat;
+    if (fstat(shm_fd, &shm_stat) == -1) {
+        perror("fstat()");
+        exit(1);
+    }
+ //   printf("Shared memory file size: %ld\n", shm_stat.st_size);
+
+    // mmap 
+    char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+
+    if (shm == MAP_FAILED) {
+        perror("mmap()");
+        exit(1);
+    }
+
+    shm_cardreader *shared = (shm_cardreader *)(shm+shm_offset);
 
     /**************************
     Code to connect to overseer
@@ -57,6 +88,7 @@ int main(int argc, char **argv)
 
     // Define server address and port
     struct sockaddr_in serverAddr;
+    //configureServerAddressForClient(serverAddr, "127.0.0.1", int server_port)
     memset(&serverAddr, 0, sizeof(serverAddr));
     if (inet_pton(AF_INET, "127.0.0.1",&serverAddr.sin_addr) != 1) {
         perror("inet_pton()");
@@ -83,62 +115,52 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    /*********************************************
-    Code to connect to share memory with simulator
-    *********************************************/
-
-    // initialise shm
-    int shm_fd = shm_open(shm_path, O_RDWR, 0);
-   // printf("\n\nshm_open executed\n");
-
-    // handle failed shm_open
-    if (shm_fd == -1) {
-        perror("shm_open()");
-        exit(1);
+    if (shutdown(sockfd, SHUT_RDWR) < 0) {
+        perror("Error in shutting down");
+        return 1; // Return an error code if shutdown fails
     }
 
-    // Obtain statistics related to shm. Intended to find size of shm.
-    struct stat shm_stat;
-    if (fstat(shm_fd, &shm_stat) == -1) {
-        perror("fstat()");
-        exit(1);
-    }
- //   printf("Shared memory file size: %ld\n", shm_stat.st_size);
-
-    // mmap 
-    char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-   // printf("\nmmap done, but not checked\n");
-
-    if (shm == MAP_FAILED) {
-        perror("mmap()");
-        exit(1);
-    }
-   // printf("\nmmap check done \n");
-    // cast memory offset onto card_reader
-    shm_cardreader *shared = (shm_cardreader *)(shm + shm_offset);
-    //printf("\nshm cast done\n");
+    close(sockfd);
 
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
     //printf("\n mutex lock done\n");
 
+
     for(;;) {
-        printf("\nentered infinite loop\n");
         if (shared->scanned[0] != '\0') {
-            printf("\n\nentered the if statement\n\n");
-          //  char buf[BUFFER_SIZE+1];
+
+            int sockfd2 = createSocket();
+            if (sockfd2 == 1) {
+                printf("socket creation failed");
+                exit(1);
+            }
+
+            // Define server address and port
+            struct sockaddr_in serverAddr;
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            if (inet_pton(AF_INET, "127.0.0.1",&serverAddr.sin_addr) != 1) {
+                perror("inet_pton()");
+                exit(1);
+            }
+
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(portNumber);
+
+            //configureServerAddress(&serverAddr, "127.0.0.1", *overseer_port);
+
+            // Establish connection and corresponding error handling
+            int connection_status = establishConnection(sockfd2, serverAddr, programName);
+            if (connection_status == 1) {
+                printf("cardreader has failed\n");
+                exit(1);
+            }
+
             char scannedMessage[50];
-          //  memcpy(buf, shared->scanned,16);
-           // printf("\nmemcpy done\n");
-          //  buf[16] = '\0';
 
             // SEND SCANNED DATA
-            printf("%s", shared->scanned);
-            printf("\nattempting to do sprintf\n");
             sprintf(scannedMessage, "CARDREADER %d SCANNED %s#", id, shared->scanned);
-            printf("\nsprintf done\n");
-            int sendMessage = sendData(sockfd, scannedMessage);
-            printf("\nmessage sent\n");
+            int sendMessage = sendData(sockfd2, scannedMessage);
             if(sendMessage == 1) {
                 perror("send()");
                 exit(1);
@@ -159,23 +181,31 @@ int main(int argc, char **argv)
             else {
                 receiveBuf[messageReceived] = '\0'; // Null terminate received data
                 if (receiveBuf[0] == 'Y') {
-                    shared->response = 'Y';
+                    shared->response = 'test';
                 }
                 else {
-                    shared->response = 'N';
+                    shared->response = 'testN';
                 }
             }
             //printf("Scanned %s\n", buf);
-            shared->response = 'Y';
+            shared->response = 'test';
             pthread_cond_signal(&shared->response_cond);
+
+            if (shutdown(sockfd, SHUT_RDWR) < 0) {
+                perror("Error in shutting down");
+            return 1; // Return an error code if shutdown fails
+            }
+
+            close(sockfd2);
+
         }
-
         pthread_cond_wait(&shared->scanned_cond, &shared->mutex);
-
     }
 
     pthread_mutex_unlock(&shared->mutex);
+
     
+
     //general cleanup with error handling
     if (shm_unlink(shm_path) == -1) {
         perror("shm_unlink()");
@@ -201,9 +231,7 @@ int main(int argc, char **argv)
         perror("munmap()");
     }
 
-    close(sockfd);
     close(shm_fd);
 
     return 0;
-
 }
