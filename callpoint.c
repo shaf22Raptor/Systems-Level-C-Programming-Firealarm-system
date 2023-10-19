@@ -41,15 +41,6 @@ int main(int argc, char **argv)
     off_t shm_offset = (off_t)atoi(argv[3]);
     const char *firealarm_port = argv[5];
 
-    // Define server address and port
-    struct sockaddr_in firealarmAddr;
-    configureServerAddress(&firealarmAddr, "127.0.0.1", firealarm_port);
-
-    // Initialise UDP connection to fire alarm unit
-    int udp_sockfd = createSocket();
-
-
-
     /*********************************************
     Code to connect to share memory with simulator
     *********************************************/
@@ -83,6 +74,17 @@ int main(int argc, char **argv)
 
     // cast memory offset onto card_reader
     shm_callpoint *shared = (shm_callpoint *)(shm + shm_offset);
+
+    /****************************************
+     * code to connect to fire alarm
+    ****************************************/
+
+    // Define server address and port
+    struct sockaddr_in firealarmAddr;
+    configureServerAddress(&firealarmAddr, "127.0.0.1", firealarm_port);
+
+    // Initialise UDP connection to fire alarm unit
+    int udp_sockfd = createSocket();
 
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
