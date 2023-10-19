@@ -20,17 +20,16 @@ int createSocket() {
 
 }
 
-/*void configureServerAddressForClient(struct sockaddr_in *addr, const char *server_ip, int *server_port) {
+void configureServerAddressForClient(struct sockaddr_in addr, const char server_ip, int server_port) {
     memset(&addr, 0, sizeof(addr));
-    if (inet_pton(AF_INET, "127.0.0.1", (struct sockaddr *)&addr.sin_addr) != 1) {
+    if (inet_pton(AF_INET, server_ip, &addr.sin_addr) != 1) {
         perror("inet_pton()");
         return 1;
     }
 
-    addr->sin_addr.s_addr = htonl(INADDR_ANY);
-    addr->sin_port = htons(server_port);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(server_port);
 }
-*/
 
 int establishConnection(int socket, struct sockaddr_in serverAddr, char *programName) {
     int connection_status = connect(socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
@@ -46,7 +45,6 @@ int establishConnection(int socket, struct sockaddr_in serverAddr, char *program
 int sendData(int socket, char *data) {
     // Send data
     int sent = send(socket, data, strlen(data), 0);
-    printf("** sent = %d\n", sent);
     if (sent == -1) {
         printf("Error: Failed to send data\n");
         return 1;
