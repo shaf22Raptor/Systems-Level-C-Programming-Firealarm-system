@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-pthread -Wall
 LDFLAGS=-pthread -lrt
 
-all: cardreader door
+all: cardreader door callpoint
 
 cardreader: cardreader.o tcp_communication.o
 	$(CC) $(CFLAGS) -o cardreader cardreader.o tcp_communication.o $(LDFLAGS)
@@ -18,6 +18,15 @@ door: door.o
 
 door.o: door.c
 	$(CC) $(CFLAGS) -c door.c
+
+callpoint: callpoint.o udp_communication.o
+	$(CC) $(CFLAGS) -o callpoint callpoint.o udp_communication.o $(LDFLAGS)
+
+callpoint.o: callpoint.c udp_communication.h
+	$(CC) $(CFLAGS) -c callpoint.c
+
+udp_communication.o: udp_communication.c udp_communication.h
+	$(CC) $(CFLAGS) -c udp_communication.c
 
 clean:
 	rm -f cardreader door *.o

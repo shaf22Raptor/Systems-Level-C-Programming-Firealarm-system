@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <udp_communication.h>
+#include "udp_communication.h"
 
 void configureServerAddress(struct sockaddr_in *recipientAddr, const char *recipient_addr_no, int recipient_port) {
     recipientAddr->sin_family = AF_INET;
