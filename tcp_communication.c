@@ -64,3 +64,5 @@ int receiveData(int socket, char *buffer) {
 
     return dataReceived;
 }
+
+// add code for shutdown

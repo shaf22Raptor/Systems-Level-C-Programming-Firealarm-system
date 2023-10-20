@@ -39,7 +39,11 @@ int main(int argc, char **argv)
     int resendDelay = atoi(argv[1]);
     const char *shm_path = argv[2];
     off_t shm_offset = (off_t)atoi(argv[3]);
-    const char *firealarm_port = argv[5];
+    const char *firealarm_address_port = argv[5];
+
+    // Isolate port number from {ipAddress : port number}
+    const char *portString= strstr(firealarm_address_port , ":");
+    int portNumber = atoi(portString + 1);
 
     /*********************************************
     Code to connect to share memory with simulator
@@ -62,8 +66,6 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    printf("Shared memory file size: %ld\n", shm_stat.st_size);
-
     // mmap 
     char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
 
@@ -79,12 +81,17 @@ int main(int argc, char **argv)
      * code to connect to fire alarm
     ****************************************/
 
+    // Create UDP socket
+    int udp_sockfd = createSocket();
+
     // Define server address and port
     struct sockaddr_in firealarmAddr;
-    configureServerAddress(&firealarmAddr, "127.0.0.1", firealarm_port);
+    //configureServerAddress(&firealarmAddr, "127.0.0.1", firealarm_port);
+    firealarmAddr.sin_family = AF_INET;
+    firealarmAddr.sin_port = htons(portNumber);
+    firealarmAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     // Initialise UDP connection to fire alarm unit
-    int udp_sockfd = createSocket();
 
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
@@ -95,7 +102,7 @@ int main(int argc, char **argv)
                 /********************
                 SEND EMERGENCY ALARM
                 //******************/
-                ssize_t emergencyAlarm = sendData(udp_sockfd, shared->status, &firealarmAddr);
+                int emergencyAlarm = sendData(udp_sockfd, shared->status, &firealarmAddr);
                 usleep(resendDelay);
             }
         }
