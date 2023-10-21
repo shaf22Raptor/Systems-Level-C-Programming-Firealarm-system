@@ -175,15 +175,17 @@ int main(int argc, char **argv) {
         } else if (strncmp(buffer, "OPEN#", 5) == 0) {
             /* Open door */
             pthread_mutex_lock(&shared->mutex);
-            shared->status = 'O';
-            strcpy(response, "OPENING#\n");
+            shared->status = 'o';
+            pthread_cond_signal(&shared->cond_start);  
             pthread_mutex_unlock(&shared->mutex);
+            strcpy(response, "OPENING#\n");
         } else if (strncmp(buffer, "CLOSE#", 6) == 0) {
             /* Close door */
             pthread_mutex_lock(&shared->mutex);
-            shared->status = 'C';
-            strcpy(response, "CLOSING#\n");
+            shared->status = 'c';
+            pthread_cond_signal(&shared->cond_start);  
             pthread_mutex_unlock(&shared->mutex);
+            strcpy(response, "CLOSING#\n");
         } else if (strncmp(buffer, "OPEN_EMERG#", 11) == 0) {
             /* Emergency command to forcefully open the door */
             if (shared->status == 'C' || shared->status == 'c') {  
@@ -234,4 +236,4 @@ int main(int argc, char **argv) {
     close(overseer_sock);
     close(shm_fd);
     return 0;
-}
+} 
