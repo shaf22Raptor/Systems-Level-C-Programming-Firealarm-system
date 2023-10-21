@@ -19,6 +19,12 @@ door: door.o
 door.o: door.c
 	$(CC) $(CFLAGS) -c door.c
 
+firealarm: firealarm.o
+	$(CC) $(CFLAGS) -o firealarm firealarm.o $(LDFLAGS)
+
+firealarm.o: firealarm.c
+	$(CC) $(CFLAGS) -c firealarm.c	
+
 callpoint: callpoint.o udp_communication.o
 	$(CC) $(CFLAGS) -o callpoint callpoint.o udp_communication.o $(LDFLAGS)
 
