@@ -11,7 +11,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#include "udp_communication.h"
+//#include "udp_communication.h"
 
 // Message for emergency Datagram
 struct Data {
