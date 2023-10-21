@@ -177,8 +177,8 @@ int main(int argc, char **argv) {
             pthread_mutex_lock(&shared->mutex);
             shared->status = 'o';
             pthread_cond_signal(&shared->cond_start);  
-            strcpy(response, "OPENING#\n");
             pthread_mutex_unlock(&shared->mutex);
+            strcpy(response, "OPENING#\n");
         } else if (strncmp(buffer, "CLOSE#", 6) == 0) {
             /* Close door */
             pthread_mutex_lock(&shared->mutex);
