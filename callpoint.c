@@ -121,7 +121,7 @@ int main(int argc, char **argv)
                 
             }
         }
-        pthread_cond_wait(&shared->status, &shared->mutex);
+        pthread_cond_wait(&shared->cond, &shared->mutex);
     }
     pthread_mutex_unlock(&shared->mutex);
     
