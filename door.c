@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    /* Initialization */
+    /* Initialisation */
     int id = atoi(argv[1]);
     char *addr_port = argv[2];
     char *config = argv[3];

@@ -3,12 +3,14 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <netdb.h>
 
 #define BUFFER_SIZE 256
 #define MAX_DOORS 100
@@ -46,200 +48,128 @@ int detection_count = 0;
 
 // Main function
 int main(int argc, char **argv) {
-    if (argc != 9) {
+    if (argc != 8) {
         fprintf(stderr, "Usage: firealarm {address:port} {temperature threshold} {min detections} {detection period (in microseconds)} {shared memory path} {shared memory offset} {overseer address:port}\n");
         return 1;
     }
 
-    // Parsing command line arguments and initialization
-    const char *bind_address = argv[1];
+    // Initialization of variables from arguments
+    char *addr_port = argv[1];
     int temp_threshold = atoi(argv[2]);
     int min_detections = atoi(argv[3]);
     int detection_period = atoi(argv[4]);
-    const char *shm_path = argv[6];
-    off_t shm_offset = (off_t)atoi(argv[7]);
-    const char *overseer_addr = argv[7];
-    char *server_ip = strtok(bind_address, ":");
-    char *server_port_str = strtok(NULL, ":");
-    int server_port = atoi(server_port_str);
+    char *shm_path = argv[5];
+    int shm_offset = atoi(argv[6]);
+    char *overseer_addr_port = argv[7];
 
-    // Setup UDP socket
-    int udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udp_fd == -1) {
-        perror("Error creating socket");
+    /* Socket setup for the door controller's server */
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);   /* Create a socket for communication */
+    struct sockaddr_in servaddr;
+    servaddr.sin_family = AF_INET;
+    char *token = strtok(addr_port, ":");
+    servaddr.sin_addr.s_addr = inet_addr(token);
+    token = strtok(NULL, ":");
+    servaddr.sin_port = htons(atoi(token));         /* Assign port to this socket */
+
+    /* Binding the socket to the server address */
+    if (bind(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0) {
+        perror("bind failed");
         exit(EXIT_FAILURE);
     }
+    listen(sockfd, 10);
 
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(server_port);
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    
-
-    if (bind(udp_fd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("Error binding socket");
-        close(udp_fd);  // Always close the file descriptor if not proceeding further
-        exit(EXIT_FAILURE);
-    }
-
-    // Setup shared memory
+    /* Shared memory initialization */
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
-    if(shm_fd == -1) {
+    if (shm_fd == -1) {
         perror("shm_open()");
-        return 1;
+        exit(1);
     }
 
-    shm_alarm *shared = (shm_alarm *)mmap(NULL, sizeof(shm_alarm), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, shm_offset);
-    if(shared == MAP_FAILED) {
+    struct stat shm_stat; /* To obtain file size */
+    if (fstat(shm_fd, &shm_stat) == -1) {
+        perror("fstat()");
+        exit(1);
+    }
+
+    /* Map the shared memory in the address space of the process */
+    char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shm == MAP_FAILED) {
         perror("mmap()");
-        return 1;
+        exit(1);
     }
 
-    // Parse overseer address and port
-    char *temp_overseer_addr = strdup(overseer_addr);  // Remember to free it later
-    char *overseer_ip = strtok(temp_overseer_addr, ":");
+    shm_alarm *shared = (shm_alarm *)(shm + shm_offset);  /* Pointer to the shared structure */
+    shared->alarm = '-';                               /* Initially, the door is considered closed */
+
+    // UDP socket setup for the fire alarm system's communication
+    int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_sockfd < 0) {
+        perror("Cannot create socket");
+        return EXIT_FAILURE;
+    }
+
+    // Create a separate sockaddr_in structure for UDP.
+    struct sockaddr_in udp_servaddr;
+    memset(&udp_servaddr, 0, sizeof(udp_servaddr));
+    udp_servaddr.sin_family = AF_INET;
+
+    // If the UDP server is supposed to bind to the same address and port, reset the tokenizer or use different variables.
+    char *udp_token; // No need for re-declaration, just use it.
+    udp_token = strtok(NULL, ":"); // Resetting to the first token.
+    udp_servaddr.sin_addr.s_addr = inet_addr(udp_token);
+    udp_token = strtok(NULL, ":");
+    udp_servaddr.sin_port = htons(atoi(udp_token));
+
+    // Bind to the UDP socket.
+    if (bind(udp_sockfd, (struct sockaddr*)&udp_servaddr, sizeof(udp_servaddr)) < 0) {
+        perror("UDP bind failed");
+        close(udp_sockfd);
+        return EXIT_FAILURE;
+    }
+
+    // Setup TCP connection with overseer and send initialization message
+    /* Connect to overseer and send initialization message */
+    struct sockaddr_in overseer_addr;
+    memset(&overseer_addr, 0, sizeof(overseer_addr));
+    overseer_addr.sin_family = AF_INET;
+
+    /* Parsing overseer IP address and port */
+    char *overseer_ip = strtok(overseer_addr_port, ":");
     char *overseer_port_str = strtok(NULL, ":");
     if (!overseer_ip || !overseer_port_str) {
         fprintf(stderr, "Error: Overseer address should be in the format ip:port\n");
-        return 1;
+        exit(EXIT_FAILURE);
     }
 
     int overseer_port = atoi(overseer_port_str);
     if (overseer_port == 0) {
         fprintf(stderr, "Error: Invalid port number\n");
-        return 1;
+        exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in overseer_address;
-    memset(&overseer_address, 0, sizeof(overseer_address));
-    overseer_address.sin_family = AF_INET;
-    overseer_address.sin_port = htons(overseer_port);
-    if (inet_pton(AF_INET, overseer_ip, &overseer_address.sin_addr) <= 0) {
+    if (inet_pton(AF_INET, overseer_ip, &overseer_addr.sin_addr) <= 0) {
         fprintf(stderr, "Invalid overseer IP address\n");
-        free(temp_overseer_addr);
-        return 1;
+        exit(EXIT_FAILURE);
     }
-    
-    free(temp_overseer_addr);  // Free the duplicated address
+    overseer_addr.sin_port = htons(overseer_port);
 
-
-    // Create a socket for TCP connection to overseer
-    int overseer_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (overseer_sockfd < 0) {
+    /* Communication setup with the overseer */
+    int overseer_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (overseer_sock < 0) {
         perror("Cannot create socket");
-        return 1;
+        exit(EXIT_FAILURE);
     }
 
-    // Connect to overseer
-    if (connect(overseer_sockfd, (struct sockaddr *)&overseer_address, sizeof(overseer_address)) < 0) {
-    perror("connect()");
-    return 1;
+    if (connect(overseer_sock, (struct sockaddr*)&overseer_addr, sizeof(overseer_addr)) < 0) {
+        perror("Connection to overseer failed");
+        close(overseer_sock);
+        exit(EXIT_FAILURE);
     }
 
-    // Notify overseer about the fire alarm service
-    char init_msg[BUFFER_SIZE];
-    snprintf(init_msg, BUFFER_SIZE, "FIREALARM %s:%d#", inet_ntoa(serverAddr.sin_addr), ntohs(serverAddr.sin_port));
-    if (send(overseer_sockfd, init_msg, strlen(init_msg), 0) < 0) {
-        perror("send()");
-        return 1;
-    }
+    char init_msg[100];
+    snprintf(init_msg, sizeof(init_msg), "FIREALARM %s:%d HELLO#\n", inet_ntoa(servaddr.sin_addr), ntohs(servaddr.sin_port));
+    send(overseer_sock, init_msg, strlen(init_msg), 0);
 
-    // Main loop: listen for temperature data or door registration
-    while (1) {
-        struct sockaddr_in clientAddr;
-        socklen_t addrLen = sizeof(clientAddr);
-        char buffer[BUFFER_SIZE];
 
-        // Receive datagrams
-    int recvLen = recvfrom(udp_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&clientAddr, &addrLen);
-    if (recvLen > 0) {
-        // Handle FIRE datagram
-        if (memcmp(buffer, "FIRE", 4) == 0) {
-            pthread_mutex_lock(&shared->mutex);
-            shared->alarm = 'A';
-            pthread_mutex_unlock(&shared->mutex);
-            pthread_cond_signal(&shared->cond);
-
-            // Send OPEN_EMERG# to all registered doors
-            char message[] = "OPEN_EMERG#";
-            for (int i = 0; i < door_count; ++i) {
-                struct sockaddr_in doorAddr;
-                memset(&doorAddr, 0, sizeof(doorAddr));
-                doorAddr.sin_family = AF_INET;
-                doorAddr.sin_port = door_ports[i];
-                doorAddr.sin_addr = door_addresses[i];
-
-                int door_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-                if (door_sockfd < 0) continue;  // If unable to create a socket, skip to the next door
-
-                if (connect(door_sockfd, (struct sockaddr *)&doorAddr, sizeof(doorAddr)) >= 0) {
-                    send(door_sockfd, message, sizeof(message), 0);
-                    close(door_sockfd);
-                }
-            }
-        }
-        // Handle TEMP datagram
-        else if (memcmp(buffer, "TEMP", 4) == 0) {
-           // Parse the datagram
-            struct datagram_format *data = (struct datagram_format *)buffer;
-            float temperature = data->temperature;
-            long long timestamp = data->timestamp.tv_sec; // Assuming it's in seconds for simplicity
-
-            // Check temperature and record detection if it's above the threshold
-            if (temperature >= temp_threshold) {
-                if (detection_count < MAX_DETECTIONS) {
-                    detection_timestamps[detection_count++] = timestamp;
-                }
-
-                // Check if we need to trigger the alarm
-                int relevant_detections = 0;
-                for (int i = 0; i < detection_count; ++i) {
-                    if ((timestamp - detection_timestamps[i]) < detection_period) {
-                        ++relevant_detections;
-                    }
-                }
-
-                if (relevant_detections >= min_detections) {
-                    // Trigger alarm
-                    pthread_mutex_lock(&shared->mutex);
-                    shared->alarm = 'A';
-                    pthread_cond_signal(&shared->cond);
-                    pthread_mutex_unlock(&shared->mutex);
-
-                    // Resetting detection count can be considered based on the logic you need
-                    detection_count = 0;
-                }
-            }
-        }
-        // Handle DOOR registration
-        else if (memcmp(buffer, "DOOR", 4) == 0 && recvLen == sizeof(door_datagram)) {
-            door_datagram *datagram = (door_datagram *)buffer;
-
-            if (door_count < MAX_DOORS) {
-                // Add the door to your list
-                door_addresses[door_count] = datagram->door_addr;
-                door_ports[door_count] = datagram->door_port;
-                ++door_count;
-
-                // Send back a confirmation
-                door_confirmation confirm = {
-                    .header = {'D', 'R', 'E', 'G'},
-                    .door_addr = datagram->door_addr,
-                    .door_port = datagram->door_port
-                };
-
-                sendto(udp_fd, &confirm, sizeof(confirm), 0, (struct sockaddr *)&clientAddr, addrLen);
-            }
-        }
-    }
-
-    // Cleanup
-    free(server_ip);
-    close(overseer_sockfd);
-    close(udp_fd);
-    munmap(shared, sizeof(*shared));
-    close(shm_fd);
-
-    return 0;
+    return 0;  // Successful exit
 }
