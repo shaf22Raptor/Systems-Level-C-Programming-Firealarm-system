@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/time.h>
+#include <time.h>
 
 struct timeval lastUpdateTime;
 void updateLastUpdateTime();
@@ -58,6 +59,10 @@ int main(int argc, char **argv[])
     const char *portString = strstr(tempsensor_addr, ":");
     int portNumber = atoi(portString + 1);
 
+    struct timespec condWait;
+    clock_gettime(CLOCK_REALTIME, &condWait);
+    condWait.tv_sec += max_wait_condvar / 1000000;
+
     // Shared memory
     //  initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
@@ -97,6 +102,19 @@ int main(int argc, char **argv[])
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
+    }
+
+    struct sockaddr_in sensor_addr;
+
+    memset(&sensor_addr, '\0', sizeof(sensor_addr));
+    sensor_addr.sin_family = AF_INET;
+    sensor_addr.sin_port = htons(atoi(argv[1]));
+    sensor_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    /* bind server address to socket descriptor */
+    if (bind(sockfd, (struct sockaddr*)&sensor_addr, sizeof(sensor_addr))==-1) {
+        perror("[-]bind error");
+        return 1;
     }
 
     // mutex lock for normal operation
@@ -167,8 +185,10 @@ int main(int argc, char **argv[])
             }
         }
         while(1) {
-
+            
         }
+        pthread_mutex_lock(&shared->mutex);
+        pthread_cond_timedwait(&shared->cond, &shared->mutex, &condWait);
     }
 
     return 0;
