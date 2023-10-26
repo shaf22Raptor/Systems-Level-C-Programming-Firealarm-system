@@ -47,7 +47,7 @@ int detection_count = 0;
 // Main function
 int main(int argc, char **argv) {
     if (argc != 9) {
-        fprintf(stderr, "Usage: firealarm {address:port} {temperature threshold} {min detections} {detection period (in microseconds)} {reserved argument} {shared memory path} {shared memory offset} {overseer address:port}\n");
+        fprintf(stderr, "Usage: firealarm {address:port} {temperature threshold} {min detections} {detection period (in microseconds)} {shared memory path} {shared memory offset} {overseer address:port}\n");
         return 1;
     }
 
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     int detection_period = atoi(argv[4]);
     const char *shm_path = argv[6];
     off_t shm_offset = (off_t)atoi(argv[7]);
-    const char *overseer_addr = argv[8];
+    const char *overseer_addr = argv[7];
     char *server_ip = strtok(bind_address, ":");
     char *server_port_str = strtok(NULL, ":");
     int server_port = atoi(server_port_str);
@@ -151,78 +151,86 @@ int main(int argc, char **argv) {
         socklen_t addrLen = sizeof(clientAddr);
         char buffer[BUFFER_SIZE];
 
-        int recvLen = recvfrom(udp_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&clientAddr, &addrLen);
-        if (recvLen > 0) {
-            buffer[recvLen] = 0;  // null-terminate the buffer
+        // Receive datagrams
+    int recvLen = recvfrom(udp_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&clientAddr, &addrLen);
+    if (recvLen > 0) {
+        // Handle FIRE datagram
+        if (memcmp(buffer, "FIRE", 4) == 0) {
+            pthread_mutex_lock(&shared->mutex);
+            shared->alarm = 'A';
+            pthread_mutex_unlock(&shared->mutex);
+            pthread_cond_signal(&shared->cond);
 
-            // Check if it is a door registration message
-            if (memcmp(buffer, "DOOR", 4) == 0 && recvLen == sizeof(door_datagram)) {
-                door_datagram *datagram = (door_datagram *)buffer;
+            // Send OPEN_EMERG# to all registered doors
+            char message[] = "OPEN_EMERG#";
+            for (int i = 0; i < door_count; ++i) {
+                struct sockaddr_in doorAddr;
+                memset(&doorAddr, 0, sizeof(doorAddr));
+                doorAddr.sin_family = AF_INET;
+                doorAddr.sin_port = door_ports[i];
+                doorAddr.sin_addr = door_addresses[i];
 
-                // Save the door information
-                if (door_count < MAX_DOORS) {
-                    door_addresses[door_count] = datagram->door_addr;
-                    door_ports[door_count] = datagram->door_port;
-                    door_count++;
+                int door_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+                if (door_sockfd < 0) continue;  // If unable to create a socket, skip to the next door
 
-                    // Send confirmation back to the door
-                    door_confirmation confirmation = {.header = {'D', 'R', 'E', 'G'}, .door_addr = datagram->door_addr, .door_port = datagram->door_port};
-                    if (sendto(udp_fd, &confirmation, sizeof(confirmation), 0, (struct sockaddr *)&clientAddr, addrLen) < 0) {
-                        perror("sendto()");
-                    }
-                }
-            } else {
-                // Assume it's a temperature message
-                int temp = atoi(buffer);
-                long long curr_time = (long long)time(NULL);
-
-                // If temperature is above the threshold, consider it a detection
-                if (temp >= temp_threshold) {
-                    // Add detection timestamp
-                    if (detection_count < MAX_DETECTIONS) {
-                        detection_timestamps[detection_count++] = curr_time;
-                    }
-
-                    // Check for alarm condition
-                    int detections = 0;
-                    for (int i = 0; i < detection_count; i++) {
-                        if (curr_time - detection_timestamps[i] <= detection_period) {
-                            detections++;
-                        }
-                    }
-
-                    if (detections >= min_detections) {
-                        pthread_mutex_lock(&shared->mutex);
-
-                        if (shared->alarm == '0') {
-                            shared->alarm = '1';  // Set the alarm
-                            pthread_cond_signal(&shared->cond);  // Notify others about the alarm
-
-                            // Send alarm to all registered doors
-                            for (int i = 0; i < door_count; i++) {
-                                struct sockaddr_in doorAddr;
-                                memset(&doorAddr, 0, sizeof(doorAddr));
-                                doorAddr.sin_family = AF_INET;
-                                doorAddr.sin_addr = door_addresses[i];
-                                doorAddr.sin_port = door_ports[i];
-
-                                if (sendto(udp_fd, "ALARM#", 6, 0, (struct sockaddr *)&doorAddr, sizeof(doorAddr)) < 0) {
-                                    perror("sendto()");
-                                }
-                            }
-
-                            // Send alarm to overseer
-                            if (send(overseer_sockfd, "ALARM#", 6, 0) < 0) {
-                                perror("send()");
-                            }
-                        }
-
-                        pthread_mutex_unlock(&shared->mutex);
-                    }
+                if (connect(door_sockfd, (struct sockaddr *)&doorAddr, sizeof(doorAddr)) >= 0) {
+                    send(door_sockfd, message, sizeof(message), 0);
+                    close(door_sockfd);
                 }
             }
-        } else if (recvLen < 0) {
-            perror("recvfrom()");
+        }
+        // Handle TEMP datagram
+        else if (memcmp(buffer, "TEMP", 4) == 0) {
+           // Parse the datagram
+            struct datagram_format *data = (struct datagram_format *)buffer;
+            float temperature = data->temperature;
+            long long timestamp = data->timestamp.tv_sec; // Assuming it's in seconds for simplicity
+
+            // Check temperature and record detection if it's above the threshold
+            if (temperature >= temp_threshold) {
+                if (detection_count < MAX_DETECTIONS) {
+                    detection_timestamps[detection_count++] = timestamp;
+                }
+
+                // Check if we need to trigger the alarm
+                int relevant_detections = 0;
+                for (int i = 0; i < detection_count; ++i) {
+                    if ((timestamp - detection_timestamps[i]) < detection_period) {
+                        ++relevant_detections;
+                    }
+                }
+
+                if (relevant_detections >= min_detections) {
+                    // Trigger alarm
+                    pthread_mutex_lock(&shared->mutex);
+                    shared->alarm = 'A';
+                    pthread_cond_signal(&shared->cond);
+                    pthread_mutex_unlock(&shared->mutex);
+
+                    // Resetting detection count can be considered based on the logic you need
+                    detection_count = 0;
+                }
+            }
+        }
+        // Handle DOOR registration
+        else if (memcmp(buffer, "DOOR", 4) == 0 && recvLen == sizeof(door_datagram)) {
+            door_datagram *datagram = (door_datagram *)buffer;
+
+            if (door_count < MAX_DOORS) {
+                // Add the door to your list
+                door_addresses[door_count] = datagram->door_addr;
+                door_ports[door_count] = datagram->door_port;
+                ++door_count;
+
+                // Send back a confirmation
+                door_confirmation confirm = {
+                    .header = {'D', 'R', 'E', 'G'},
+                    .door_addr = datagram->door_addr,
+                    .door_port = datagram->door_port
+                };
+
+                sendto(udp_fd, &confirm, sizeof(confirm), 0, (struct sockaddr *)&clientAddr, addrLen);
+            }
         }
     }
 
