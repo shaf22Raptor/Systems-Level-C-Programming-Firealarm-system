@@ -124,6 +124,15 @@ int main(int argc, char **argv[])
 
     fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
+    // Create addr_entry instance containing this sensor's details
+    struct addr_entry thisSensor;
+    if (inet_pton(AF_INET, tempsensor_addr, &(thisSensor.sensor_addr)) <= 0)
+    {
+        perror("Invalid address");
+        return 1; // Handle the error appropriately
+    }
+    thisSensor.sensor_port = portNumber;
+
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
     float oldTemp = shared->temperature;
@@ -156,15 +165,6 @@ int main(int argc, char **argv[])
 
             // list of addresses. It should only contain this sensor
 
-            // Create addr_entry instance containing this sensor's details
-            struct addr_entry thisSensor;
-            if (inet_pton(AF_INET, tempsensor_addr, &(thisSensor.sensor_addr)) <= 0)
-            {
-                perror("Invalid address");
-                return 1; // Handle the error appropriately
-            }
-            thisSensor.sensor_port = portNumber;
-
             // Add this sensor's details to the list
             datagram.address_list[0] = thisSensor;
             
@@ -193,7 +193,41 @@ int main(int argc, char **argv[])
             int len = sizeof(client_addr);
             int n = recvfrom(sockfd, (char *)receiveBuffer, MAX_BUFFER_SIZE, MSG_WAITALL, (struct sockaddr *)&client_addr, &len);
             if (n>0) {
+                int position;
                 memcpy(&receivedDatagram, receiveBuffer, sizeof(receivedDatagram));
+                float receivedTemperature = receivedDatagram.temperature;
+                struct timeval receivedTimeStamp;
+                receivedTimeStamp = receivedDatagram.timestamp;
+                struct addr_entry receivedEntries[50] = receivedDatagram.address_list[50];
+
+                if (&receivedEntries[50].sensor_addr.s_addr != 0 && &receivedEntries[50].sensor_port != 0) {
+                    for (int i =0; i<50; i++) {
+                        if (&receivedEntries[i].sensor_addr.s_addr != 0 && &receivedEntries[i].sensor_port != 0) {
+                            receivedEntries[i] = thisSensor;
+                            position = i + 1;
+                            break;
+                        }
+                    }
+                }
+
+                else {
+                    for (int i =0; i<49; i++) {
+                        receivedEntries[i] = receivedEntries[i+1];
+                    }
+                    receivedEntries[49] = thisSensor;
+                    position = 50;
+                }
+
+                //create new datagram
+                struct datagram_format passMessageOn;
+                passMessageOn.temperature = receivedTemperature;
+                passMessageOn.timestamp = receivedTimeStamp;
+                passMessageOn.id = id;
+                passMessageOn.address_count = position;
+                for (int i =0; i<49; i++) {
+                    passMessageOn.address_list[i] = receivedEntries[i];
+                }
+                
             }
             else {
                 break;
