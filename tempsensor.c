@@ -13,6 +13,8 @@
 #include <sys/time.h>
 #include <time.h>
 
+#define MAX_BUFFER_SIZE 1024
+
 struct timeval lastUpdateTime;
 void updateLastUpdateTime();
 int hasMaxWaitTimePassed(int maxUpdateWait);
@@ -47,6 +49,11 @@ int main(int argc, char **argv[])
         fprintf(stderr, "usage: {id} {address:port} {max condvar wait (microseconds)} {max update wait (microseconds)} {shared memory path} {shared memory offset} {receiver address:port}...");
         exit(1);
     }
+
+    struct sockaddr_in sensor_addr, receiver_addr, client_addr;
+
+    struct datagram_format datagram, receivedDatagram;
+    char receiveBuffer[MAX_BUFFER_SIZE];
 
     // intialise parameters for system
     int id = atoi(argv[1]);
@@ -104,8 +111,6 @@ int main(int argc, char **argv[])
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in sensor_addr;
-
     memset(&sensor_addr, '\0', sizeof(sensor_addr));
     sensor_addr.sin_family = AF_INET;
     sensor_addr.sin_port = htons(atoi(argv[1]));
@@ -116,6 +121,8 @@ int main(int argc, char **argv[])
         perror("[-]bind error");
         return 1;
     }
+
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
@@ -130,7 +137,6 @@ int main(int argc, char **argv[])
         {
             firstIteration = 0;
             // construct a struct that contains sensor's id, temp and current time and address list of only this sensor
-            struct datagram_format datagram;
 
             // construct header
             strcpy(datagram.header, "TEMP");
@@ -168,7 +174,6 @@ int main(int argc, char **argv[])
                 const char *receiverPortString = strstr(address_port, ":");
                 int receiverPortNumber = atoi(receiverPortString + 1);
 
-                struct sockaddr_in receiver_addr;
                 receiver_addr.sin_family = AF_INET;
                 receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
                 receiver_addr.sin_port = htons(receiverPortNumber);
@@ -185,7 +190,14 @@ int main(int argc, char **argv[])
             }
         }
         while(1) {
-            
+            int len = sizeof(client_addr);
+            int n = recvfrom(sockfd, (char *)receiveBuffer, MAX_BUFFER_SIZE, MSG_WAITALL, (struct sockaddr *)&client_addr, &len);
+            if (n>0) {
+                memcpy(&receivedDatagram, receiveBuffer, sizeof(receivedDatagram));
+            }
+            else {
+                break;
+            }
         }
         pthread_mutex_lock(&shared->mutex);
         pthread_cond_timedwait(&shared->cond, &shared->mutex, &condWait);
