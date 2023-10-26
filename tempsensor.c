@@ -92,6 +92,13 @@ int main(int argc, char **argv[])
     // cast memory offset onto card_reader
     shm_sensor *shared = (shm_sensor *)(shm + shm_offset);
 
+    // Create a socket
+    int sockfd;
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
     float oldTemp = shared->temperature;
@@ -138,7 +145,29 @@ int main(int argc, char **argv[])
             datagram.address_list[0] = thisSensor;
             
             //  send datagram to each receiver
-        
+            for (int i = 7; i <= argc; i++) {
+                const char *address_port = argv[i];
+                const char *receiverPortString = strstr(address_port, ":");
+                int receiverPortNumber = atoi(receiverPortString + 1);
+
+                struct sockaddr_in receiver_addr;
+                receiver_addr.sin_family = AF_INET;
+                receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+                receiver_addr.sin_port = htons(receiverPortNumber);
+
+                if (inet_pton(AF_INET, argv[i], &receiver_addr.sin_addr) <= 0) {
+                    perror("Invalid address");
+                    exit(EXIT_FAILURE);
+                }
+
+                if (sendto(sockfd, &datagram, sizeof(datagram), 0, (struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) == -1) {
+                    perror("sendto failed");
+                    exit(1);
+                }
+            }
+        }
+        while(1) {
+
         }
     }
 
