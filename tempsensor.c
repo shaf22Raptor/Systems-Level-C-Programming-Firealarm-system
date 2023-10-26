@@ -67,9 +67,7 @@ int main(int argc, char **argv[])
     int portNumber = atoi(portString + 1);
 
     struct timespec condWait;
-    clock_gettime(CLOCK_REALTIME, &condWait);
     condWait.tv_sec += max_wait_condvar / 1000000;
-
     // Shared memory
     //  initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
@@ -126,7 +124,7 @@ int main(int argc, char **argv[])
 
     // Create addr_entry instance containing this sensor's details
     struct addr_entry thisSensor;
-    if (inet_pton(AF_INET, tempsensor_addr, &(thisSensor.sensor_addr)) <= 0)
+    if (inet_pton(AF_INET, "127.0.0.1", &(thisSensor.sensor_addr)) <= 0)
     {
         perror("Invalid address");
         return 1; // Handle the error appropriately
@@ -226,6 +224,31 @@ int main(int argc, char **argv[])
                 passMessageOn.address_count = position;
                 for (int i =0; i<49; i++) {
                     passMessageOn.address_list[i] = receivedEntries[i];
+                }
+
+                // pass it on
+                for (int i = 7; i <= argc; i++) {
+                    const char *address_port = argv[i];
+                    const char *receiverPortString = strstr(address_port, ":");
+                    int receiverPortNumber = atoi(receiverPortString + 1);
+                    for (int j = 0; j < 49; j++) {
+                        if (receivedEntries[j].sensor_port == receiverPortNumber) {
+                            receiver_addr.sin_family = AF_INET;
+                            receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+                            receiver_addr.sin_port = htons(receiverPortNumber);
+
+                            if (inet_pton(AF_INET, argv[i], &receiver_addr.sin_addr) <= 0) {
+                                perror("Invalid address");
+                                exit(EXIT_FAILURE);
+                            }
+
+                            if (sendto(sockfd, &datagram, sizeof(datagram), 0, (struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) == -1) {
+                                perror("sendto failed");
+                                exit(1);
+                            }
+                            break;                            
+                        }
+                    }
                 }
                 
             }
