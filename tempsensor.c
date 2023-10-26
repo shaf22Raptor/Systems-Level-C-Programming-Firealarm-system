@@ -10,12 +10,51 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/time.h>
+
+struct timeval lastUpdateTime;
+
+void updateLastUpdateTime() {
+    gettimeofday(&lastUpdateTime, NULL);
+}
+
+// Function to check if the maximum update wait time has passed
+int hasMaxWaitTimePassed(int maxUpdateWait) {
+    struct timeval currentTime;
+    gettimeofday(&currentTime, NULL);
+
+    // Calculate the time difference in microseconds
+    long int diff = (currentTime.tv_sec - lastUpdateTime.tv_sec) * 1000000 + (currentTime.tv_usec - lastUpdateTime.tv_usec);
+
+    // Compare with the maximum update wait time
+    if (diff > maxUpdateWait) {
+        // If the time difference is greater than the max update wait, return 1
+        return 1;
+    } else {
+        // If the time difference is less than the max update wait, return 0
+        return 0;
+    }
+}
 
 typedef struct {
     float temperature;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
 } shm_sensor;
+
+struct addr_entry {
+  struct in_addr sensor_addr;
+  in_port_t sensor_port;
+};
+
+struct datagram_format {
+  char header[4]; // {'T', 'E', 'M', 'P'}
+  struct timeval timestamp;
+  float temperature;
+  uint16_t id;
+  uint8_t address_count;
+  struct addr_entry address_list[50];
+};
 
 int main(int argc, char **argv[]) {
     if (argc<6) {
@@ -30,7 +69,6 @@ int main(int argc, char **argv[]) {
     int max_wait_update = atoi(argv[4]);
     const char *shm_path = argv[5];
     off_t shm_offset = (off_t)atoi(argv[6]);
-    //create array of all receiver addresses that are supplied
 
     //UDP CONNECTION FUNCTION
 
@@ -70,10 +108,13 @@ int main(int argc, char **argv[]) {
     float oldTemp = shared->temperature;
     int firstIteration = 1; // see if this is first iteration of for loop. 1 for true, 0 for false
     for(;;) {
+        firstIteration = 0;
         float currentTemp = shared->temperature;
         pthread_mutex_unlock(&shared->mutex);
-        if (currentTemp != oldTemp || firstIteration == 1) {  // or if max update wait has passed since sensor last sent an update 
+        if (currentTemp != oldTemp || firstIteration == 1 || hasMaxWaitTimePassed(max_wait_update)) {
+            firstIteration = 0; 
            // construct a struct that contains sensor's id, temp and current time and address list of only this sensor
+           
            // send datagram to each receiver
         }
         
