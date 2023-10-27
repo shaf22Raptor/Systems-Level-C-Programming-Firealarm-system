@@ -42,7 +42,7 @@ struct datagram_format
     struct addr_entry address_list[50];
 };
 
-int main(int argc, char **argv[])
+int main(int argc, char **argv)
 {
     if (argc < 6)
     {
@@ -67,6 +67,7 @@ int main(int argc, char **argv[])
     int portNumber = atoi(portString + 1);
 
     struct timespec condWait;
+    condWait.tv_sec = 0;
     condWait.tv_sec += max_wait_condvar / 1000000;
     // Shared memory
     //  initialise shm
@@ -189,14 +190,17 @@ int main(int argc, char **argv[])
         }
         while(1) {
             int len = sizeof(client_addr);
-            int n = recvfrom(sockfd, (char *)receiveBuffer, MAX_BUFFER_SIZE, MSG_WAITALL, (struct sockaddr *)&client_addr, &len);
+            int n = recvfrom(sockfd, (char *)receiveBuffer, MAX_BUFFER_SIZE, MSG_WAITALL, (struct sockaddr *)&client_addr, (socklen_t *)&len);
             if (n>0) {
                 int position;
                 memcpy(&receivedDatagram, receiveBuffer, sizeof(receivedDatagram));
                 float receivedTemperature = receivedDatagram.temperature;
                 struct timeval receivedTimeStamp;
                 receivedTimeStamp = receivedDatagram.timestamp;
-                struct addr_entry receivedEntries[50] = receivedDatagram.address_list[50];
+                struct addr_entry receivedEntries[50];
+                for (int i = 0; i < 50; i++) {
+                    receivedEntries[i] = receivedDatagram.address_list[i];
+                }
 
                 if (&receivedEntries[50].sensor_addr.s_addr != 0 && &receivedEntries[50].sensor_port != 0) {
                     for (int i =0; i<50; i++) {
@@ -242,7 +246,7 @@ int main(int argc, char **argv[])
                                 exit(EXIT_FAILURE);
                             }
 
-                            if (sendto(sockfd, &datagram, sizeof(datagram), 0, (struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) == -1) {
+                            if (sendto(sockfd, &passMessageOn, sizeof(passMessageOn), 0, (struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) == -1) {
                                 perror("sendto failed");
                                 exit(1);
                             }

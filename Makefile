@@ -31,6 +31,12 @@ callpoint: callpoint.o udp_communication.o
 callpoint.o: callpoint.c udp_communication.h
 	$(CC) $(CFLAGS) -c callpoint.c
 
+tempsensor: tempsensor.o
+	$(CC) $(CFLAGS) -o tempsensor tempsensor.o $(LDFLAGS)
+
+tempsensor.o: tempsensor.c
+	$(CC) $(CFLAGS) -c tempsensor.c	
+
 udp_communication.o: udp_communication.c udp_communication.h
 	$(CC) $(CFLAGS) -c udp_communication.c
 

@@ -19,7 +19,7 @@ typedef struct {
     pthread_cond_t cond;
 } shm_sensor;
 
-int main(int argc, char **argv[])
+int main(int argc, char **argv)
 {
     if (argc < 8)
     {
