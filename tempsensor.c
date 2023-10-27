@@ -53,6 +53,8 @@ int main(int argc, char **argv)
     struct sockaddr_in sensor_addr, receiver_addr, client_addr;
 
     struct datagram_format datagram, receivedDatagram;
+    socklen_t addr_size;
+
     char receiveBuffer[MAX_BUFFER_SIZE];
 
     // intialise parameters for system
@@ -111,7 +113,7 @@ int main(int argc, char **argv)
 
     memset(&sensor_addr, '\0', sizeof(sensor_addr));
     sensor_addr.sin_family = AF_INET;
-    sensor_addr.sin_port = htons(atoi(argv[1]));
+    sensor_addr.sin_port = htons(portNumber);
     sensor_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     /* bind server address to socket descriptor */
@@ -120,9 +122,10 @@ int main(int argc, char **argv)
         perror("[-]bind error");
         return 1;
     }
-
-    fcntl(sockfd, F_SETFL, O_NONBLOCK);
-
+    
+    
+    //fcntl(sockfd, F_SETFL, O_NONBLOCK);
+    
     // Create addr_entry instance containing this sensor's details
     struct addr_entry thisSensor;
     if (inet_pton(AF_INET, "127.0.0.1", &(thisSensor.sensor_addr)) <= 0)
@@ -139,11 +142,14 @@ int main(int argc, char **argv)
     for (;;)
     {
         firstIteration = 0;
+        int enteredifagain = 0;
         float currentTemp = shared->temperature;
         pthread_mutex_unlock(&shared->mutex);
         if (currentTemp != oldTemp || firstIteration == 1 || hasMaxWaitTimePassed(max_wait_update))
         {
-            firstIteration = 0;
+            if (enteredifagain == 1) {
+                printf("entered if again \n");
+            }
             // construct a struct that contains sensor's id, temp and current time and address list of only this sensor
 
             // construct header
@@ -168,38 +174,38 @@ int main(int argc, char **argv)
             datagram.address_list[0] = thisSensor;
 
             //  send datagram to each receiver
-            for (int i = 7; i <= argc; i++)
+            for (int i = 7; i < argc; i++)
             {
-                printf("iteration of for loop no. %d\n", i);
+                //printf("iteration of for loop no. %d\n", i);
                 char *receiver_address_port = argv[i];
                 char *receiverPortString = strstr(receiver_address_port, ":");
                 int receiverPortNumber = atoi(receiverPortString + 1);
-                printf("iteration of for loop no. %d\n", i);
+                //printf("iteration of for loop no. %d\n", i);
                 receiver_addr.sin_family = AF_INET;
                 receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
                 receiver_addr.sin_port = htons(receiverPortNumber);
-                printf("iteration of for loop no. %d\n", i);
+                //printf("iteration of for loop no. %d\n", i);
 
                 if (sendto(sockfd, &datagram, sizeof(datagram), 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) == -1)
                 {
                     perror("sendto failed");
                     exit(1);
                 }
-                printf("%d message sent line 193\nafter sending message iteration of for loop no. %d\n", id, i);
+                //printf("%d message sent line 193\nafter sending message iteration of for loop no. %d\n", id, i);
             }
-            printf("left for loop line 195\n");
+            //printf("left for loop line 195\n");
         }
+        enteredifagain =1 ;
         //int len = sizeof(client_addr);
-        int len = 1;
-        printf("int len line 197\n");
-        int n = recvfrom(sockfd, (char *)receiveBuffer, MAX_BUFFER_SIZE, MSG_WAITALL, (struct sockaddr *)&client_addr, (socklen_t *)&len);
-        printf(" should have received data line 194 \n");
+        addr_size = sizeof(client_addr);
+        //printf("int len line 197\n");
+        int n = recvfrom(sockfd, &receiveBuffer, MAX_BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *)&client_addr, &addr_size);
         while (n > 0)
         {
             printf("entered infinite while loop \n");
             printf(" n>0 line 196\n");
             int position;
-            memcpy(&receivedDatagram, receiveBuffer, sizeof(receivedDatagram));
+            memcpy(&receivedDatagram, &receiveBuffer, sizeof(receivedDatagram));
             printf("memcpy good line 199");
             float receivedTemperature = receivedDatagram.temperature;
             printf(" got temperature %f line 201", receivedTemperature);
@@ -263,11 +269,12 @@ int main(int argc, char **argv)
                         receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
                         receiver_addr.sin_port = htons(receiverPortNumber);
 
-                        if (inet_pton(AF_INET, argv[i], &receiver_addr.sin_addr) <= 0)
+                     /*   if (inet_pton(AF_INET, argv[i], &receiver_addr.sin_addr) <= 0)
                         {
                             perror("Invalid address");
                             exit(EXIT_FAILURE);
                         }
+*/
 
                         if (sendto(sockfd, &passMessageOn, sizeof(passMessageOn), 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) == -1)
                         {
