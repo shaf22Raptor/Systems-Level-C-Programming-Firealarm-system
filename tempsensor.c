@@ -220,14 +220,17 @@ int main(int argc, char **argv)
             printf("copied all entries line 209 \n");
 
             printf("trying to see if received entries is full line 211\n");
-            if (&receivedEntries[50].sensor_addr.s_addr != 0 && &receivedEntries[50].sensor_port != 0)
+            if (receivedEntries[50].sensor_addr.s_addr != 0 && receivedEntries[50].sensor_port != 0)
             {
+                printf("checked last value of received entries line 225\n");
                 for (int i = 0; i < 50; i++)
                 {
-                    if (&receivedEntries[i].sensor_addr.s_addr != 0 && &receivedEntries[i].sensor_port != 0)
+                    printf("portnumber of i is %d\n", receivedEntries[i].sensor_port);
+                    printf("this sensor's portnumber is %d\n", thisSensor.sensor_port);
+                    if (receivedEntries[i].sensor_addr.s_addr != 0 && receivedEntries[i].sensor_port != 0)
                     {
                         receivedEntries[i] = thisSensor;
-                        position = i + 1;
+                        position = i;
                         break;
                     }
                 }
@@ -240,12 +243,11 @@ int main(int argc, char **argv)
                     receivedEntries[i] = receivedEntries[i + 1];
                 }
                 receivedEntries[49] = thisSensor;
-                position = 50;
+                position = 49;
             }
 
             // create new datagram
             struct datagram_format passMessageOn;
-            printf(" creating a new datagram line 232");
             passMessageOn.temperature = receivedTemperature;
             passMessageOn.timestamp = receivedTimeStamp;
             passMessageOn.id = id;
@@ -255,38 +257,25 @@ int main(int argc, char **argv)
                 passMessageOn.address_list[i] = receivedEntries[i];
             }
 
+            printf("now passing message on\n");
             // pass it on
-            for (int i = 7; i <= argc; i++)
+            for (int i = 7; i < argc; i++)
             {
                 const char *address_port = argv[i];
                 const char *receiverPortString = strstr(address_port, ":");
                 int receiverPortNumber = atoi(receiverPortString + 1);
+                printf("portnumber being passed to is %d\n", receiverPortNumber);
                 for (int j = 0; j < 49; j++)
                 {
                     if (receivedEntries[j].sensor_port == receiverPortNumber)
                     {
-                        receiver_addr.sin_family = AF_INET;
-                        receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-                        receiver_addr.sin_port = htons(receiverPortNumber);
-
-                     /*   if (inet_pton(AF_INET, argv[i], &receiver_addr.sin_addr) <= 0)
-                        {
-                            perror("Invalid address");
-                            exit(EXIT_FAILURE);
-                        }
-*/
-
-                        if (sendto(sockfd, &passMessageOn, sizeof(passMessageOn), 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) == -1)
-                        {
-                            perror("sendto failed");
-                            exit(1);
-                        }
                         break;
                     }
                 }
             }
             n = n -1;
         }
+        
         pthread_mutex_lock(&shared->mutex);
         pthread_cond_timedwait(&shared->cond, &shared->mutex, &condWait);
     }
