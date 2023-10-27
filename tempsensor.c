@@ -89,8 +89,6 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    printf("Shared memory file size: %ld\n", shm_stat.st_size);
-
     // mmap
     char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
 
@@ -105,7 +103,8 @@ int main(int argc, char **argv)
 
     // Create a socket
     int sockfd;
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+    {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
@@ -116,7 +115,8 @@ int main(int argc, char **argv)
     sensor_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     /* bind server address to socket descriptor */
-    if (bind(sockfd, (struct sockaddr*)&sensor_addr, sizeof(sensor_addr))==-1) {
+    if (bind(sockfd, (struct sockaddr *)&sensor_addr, sizeof(sensor_addr)) == -1)
+    {
         perror("[-]bind error");
         return 1;
     }
@@ -166,103 +166,151 @@ int main(int argc, char **argv)
 
             // Add this sensor's details to the list
             datagram.address_list[0] = thisSensor;
-            
-            //  send datagram to each receiver
-            for (int i = 7; i <= argc; i++) {
-                const char *address_port = argv[i];
-                const char *receiverPortString = strstr(address_port, ":");
-                int receiverPortNumber = atoi(receiverPortString + 1);
 
+            //  send datagram to each receiver
+            for (int i = 7; i <= argc; i++)
+            {
+                printf("iteration of for loop no. %d\n", i);
+                char *receiver_address_port = argv[i];
+                char *receiverPortString = strstr(receiver_address_port, ":");
+                int receiverPortNumber = atoi(receiverPortString + 1);
+                printf("iteration of for loop no. %d\n", i);
                 receiver_addr.sin_family = AF_INET;
                 receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
                 receiver_addr.sin_port = htons(receiverPortNumber);
+                printf("iteration of for loop no. %d\n", i);
 
-                if (inet_pton(AF_INET, argv[i], &receiver_addr.sin_addr) <= 0) {
-                    perror("Invalid address");
-                    exit(EXIT_FAILURE);
-                }
-
-                if (sendto(sockfd, &datagram, sizeof(datagram), 0, (struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) == -1) {
+                if (sendto(sockfd, &datagram, sizeof(datagram), 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) == -1)
+                {
                     perror("sendto failed");
                     exit(1);
                 }
+                printf("%d message sent line 193\nafter sending message iteration of for loop no. %d\n", id, i);
             }
+            printf("left for loop line 195\n");
         }
-        while(1) {
-            int len = sizeof(client_addr);
-            int n = recvfrom(sockfd, (char *)receiveBuffer, MAX_BUFFER_SIZE, MSG_WAITALL, (struct sockaddr *)&client_addr, (socklen_t *)&len);
-            if (n>0) {
-                int position;
-                memcpy(&receivedDatagram, receiveBuffer, sizeof(receivedDatagram));
-                float receivedTemperature = receivedDatagram.temperature;
-                struct timeval receivedTimeStamp;
-                receivedTimeStamp = receivedDatagram.timestamp;
-                struct addr_entry receivedEntries[50];
-                for (int i = 0; i < 50; i++) {
-                    receivedEntries[i] = receivedDatagram.address_list[i];
-                }
-
-                if (&receivedEntries[50].sensor_addr.s_addr != 0 && &receivedEntries[50].sensor_port != 0) {
-                    for (int i =0; i<50; i++) {
-                        if (&receivedEntries[i].sensor_addr.s_addr != 0 && &receivedEntries[i].sensor_port != 0) {
-                            receivedEntries[i] = thisSensor;
-                            position = i + 1;
-                            break;
-                        }
-                    }
-                }
-
-                else {
-                    for (int i =0; i<49; i++) {
-                        receivedEntries[i] = receivedEntries[i+1];
-                    }
-                    receivedEntries[49] = thisSensor;
-                    position = 50;
-                }
-
-                //create new datagram
-                struct datagram_format passMessageOn;
-                passMessageOn.temperature = receivedTemperature;
-                passMessageOn.timestamp = receivedTimeStamp;
-                passMessageOn.id = id;
-                passMessageOn.address_count = position;
-                for (int i =0; i<49; i++) {
-                    passMessageOn.address_list[i] = receivedEntries[i];
-                }
-
-                // pass it on
-                for (int i = 7; i <= argc; i++) {
-                    const char *address_port = argv[i];
-                    const char *receiverPortString = strstr(address_port, ":");
-                    int receiverPortNumber = atoi(receiverPortString + 1);
-                    for (int j = 0; j < 49; j++) {
-                        if (receivedEntries[j].sensor_port == receiverPortNumber) {
-                            receiver_addr.sin_family = AF_INET;
-                            receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-                            receiver_addr.sin_port = htons(receiverPortNumber);
-
-                            if (inet_pton(AF_INET, argv[i], &receiver_addr.sin_addr) <= 0) {
-                                perror("Invalid address");
-                                exit(EXIT_FAILURE);
-                            }
-
-                            if (sendto(sockfd, &passMessageOn, sizeof(passMessageOn), 0, (struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) == -1) {
-                                perror("sendto failed");
-                                exit(1);
-                            }
-                            break;                            
-                        }
-                    }
-                }
-                
+        //int len = sizeof(client_addr);
+        int len = 1;
+        printf("int len line 197\n");
+        int n = recvfrom(sockfd, (char *)receiveBuffer, MAX_BUFFER_SIZE, MSG_WAITALL, (struct sockaddr *)&client_addr, (socklen_t *)&len);
+        printf(" should have received data line 194 \n");
+        while (n > 0)
+        {
+            printf("entered infinite while loop \n");
+            printf(" n>0 line 196\n");
+            int position;
+            memcpy(&receivedDatagram, receiveBuffer, sizeof(receivedDatagram));
+            printf("memcpy good line 199");
+            float receivedTemperature = receivedDatagram.temperature;
+            printf(" got temperature %f line 201", receivedTemperature);
+            struct timeval receivedTimeStamp;
+            receivedTimeStamp = receivedDatagram.timestamp;
+            printf(" received timestamp line 204 \n");
+            struct addr_entry receivedEntries[50];
+            for (int i = 0; i < 50; i++)
+            {
+                receivedEntries[i] = receivedDatagram.address_list[i];
             }
-            else {
-                break;
+            printf("copied all entries line 209 \n");
+
+            printf("trying to see if received entries is full line 211\n");
+            if (&receivedEntries[50].sensor_addr.s_addr != 0 && &receivedEntries[50].sensor_port != 0)
+            {
+                for (int i = 0; i < 50; i++)
+                {
+                    if (&receivedEntries[i].sensor_addr.s_addr != 0 && &receivedEntries[i].sensor_port != 0)
+                    {
+                        receivedEntries[i] = thisSensor;
+                        position = i + 1;
+                        break;
+                    }
+                }
             }
+
+            else
+            {
+                for (int i = 0; i < 49; i++)
+                {
+                    receivedEntries[i] = receivedEntries[i + 1];
+                }
+                receivedEntries[49] = thisSensor;
+                position = 50;
+            }
+
+            // create new datagram
+            struct datagram_format passMessageOn;
+            printf(" creating a new datagram line 232");
+            passMessageOn.temperature = receivedTemperature;
+            passMessageOn.timestamp = receivedTimeStamp;
+            passMessageOn.id = id;
+            passMessageOn.address_count = position;
+            for (int i = 0; i < 49; i++)
+            {
+                passMessageOn.address_list[i] = receivedEntries[i];
+            }
+
+            // pass it on
+            for (int i = 7; i <= argc; i++)
+            {
+                const char *address_port = argv[i];
+                const char *receiverPortString = strstr(address_port, ":");
+                int receiverPortNumber = atoi(receiverPortString + 1);
+                for (int j = 0; j < 49; j++)
+                {
+                    if (receivedEntries[j].sensor_port == receiverPortNumber)
+                    {
+                        receiver_addr.sin_family = AF_INET;
+                        receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+                        receiver_addr.sin_port = htons(receiverPortNumber);
+
+                        if (inet_pton(AF_INET, argv[i], &receiver_addr.sin_addr) <= 0)
+                        {
+                            perror("Invalid address");
+                            exit(EXIT_FAILURE);
+                        }
+
+                        if (sendto(sockfd, &passMessageOn, sizeof(passMessageOn), 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) == -1)
+                        {
+                            perror("sendto failed");
+                            exit(1);
+                        }
+                        break;
+                    }
+                }
+            }
+            n = n -1;
         }
         pthread_mutex_lock(&shared->mutex);
         pthread_cond_timedwait(&shared->cond, &shared->mutex, &condWait);
     }
+
+    close(sockfd);
+
+    // general cleanup with error handling
+    if (shm_unlink(shm_path) == -1)
+    {
+        perror("shm_unlink()");
+        exit(1);
+    }
+
+    if (pthread_mutex_destroy(&shared->mutex) != 0)
+    {
+        perror("pthread_mutex_destroy()");
+        exit(1);
+    }
+
+    if (pthread_cond_destroy(&shared->cond) != 0)
+    {
+        perror("pthread_cond_destroy");
+        exit(1);
+    }
+
+    if (munmap(shm, shm_stat.st_size) == -1)
+    {
+        perror("munmap()");
+    }
+
+    close(shm_fd);
 
     return 0;
 }

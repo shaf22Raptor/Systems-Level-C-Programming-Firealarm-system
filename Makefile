@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-pthread -Wall
 LDFLAGS=-pthread -lrt
 
-all: cardreader door callpoint firealarm
+all: cardreader door callpoint firealarm tempsensor
 
 cardreader: cardreader.o tcp_communication.o
 	$(CC) $(CFLAGS) -o cardreader cardreader.o tcp_communication.o $(LDFLAGS)
@@ -41,4 +41,4 @@ udp_communication.o: udp_communication.c udp_communication.h
 	$(CC) $(CFLAGS) -c udp_communication.c
 
 clean:
-	rm -f cardreader door callpoint firealarm *.o
+	rm -f cardreader door callpoint firealarm  tempsensor*.o
