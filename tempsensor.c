@@ -163,6 +163,7 @@ int main(int argc, char **argv)
 
             // temparture
             datagram.temperature = currentTemp;
+            datagram.timestamp = timeStamp;
 
             // id
             datagram.id = id;
