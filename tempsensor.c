@@ -335,8 +335,9 @@ int hasMaxWaitTimePassed(int maxUpdateWait)
     gettimeofday(&currentTime, NULL);
 
     // Calculate the time difference in microseconds
-    int diff = currentTime.tv_usec - lastUpdateTime.tv_usec;
-    
+    int diff_sec = (currentTime.tv_sec - lastUpdateTime.tv_sec)*1000000;
+    int diff_usec = currentTime.tv_usec - lastUpdateTime.tv_usec;
+    int diff = diff_sec + diff_usec;
     // Compare with the maximum update wait time
     if (diff > maxUpdateWait)
     {
