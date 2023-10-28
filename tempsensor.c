@@ -133,7 +133,7 @@ int main(int argc, char **argv)
     if (inet_pton(AF_INET, "127.0.0.1", &(thisSensor.sensor_addr)) <= 0)
     {
         perror("Invalid address");
-        return 1; // Handle the error appropriately
+        return 1; 
     }
     thisSensor.sensor_port = portNumber;
 
@@ -145,8 +145,6 @@ int main(int argc, char **argv)
     for (;;)
     {
         currentTemp = shared->temperature;
-        shared->temperature;
-        updateLastUpdateTime();
         pthread_mutex_unlock(&shared->mutex);
         if (currentTemp != oldTemp || firstIteration == 1 || hasMaxWaitTimePassed(max_wait_update) == 1)
         {
@@ -178,49 +176,39 @@ int main(int argc, char **argv)
             //  send datagram to each receiver
             for (int i = 7; i < argc; i++)
             {
-                // printf("iteration of for loop no. %d\n", i);
                 char *receiver_address_port = argv[i];
                 char *receiverPortString = strstr(receiver_address_port, ":");
                 int receiverPortNumber = atoi(receiverPortString + 1);
-                // printf("iteration of for loop no. %d\n", i);
+
                 receiver_addr.sin_family = AF_INET;
                 receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
                 receiver_addr.sin_port = htons(receiverPortNumber);
-                // printf("iteration of for loop no. %d\n", i);
 
                 if (sendto(sockfd, &datagram, sizeof(datagram), 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) == -1)
                 {
                     perror("sendto failed");
                     exit(1);
                 }
-                // printf("%d message sent line 193\nafter sending message iteration of for loop no. %d\n", id, i);
+                updateLastUpdateTime();
             }
-            // printf("left for loop line 195\n");
         }
-        // int len = sizeof(client_addr);
         addr_size = sizeof(client_addr);
-        // printf("int len line 197\n");
         while (1)
         {
             int n = recvfrom(sockfd, &receiveBuffer, MAX_BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *)&client_addr, &addr_size);
-        //    printf("entered infinite while loop \n");
-        //    printf(" n>0 line 196\n");
             if(n <= 0) {
                 break;
             }
             int position;
             memcpy(&receivedDatagram, &receiveBuffer, sizeof(receivedDatagram));
-        //    printf("memcpy good line 199");
             char receivedHeader[4];
             strcpy(receivedHeader, receivedDatagram.header);
 
-            //    printf(" got temperature %f line 201", receivedTemperature);
             struct timeval receivedTimeStamp;
             receivedTimeStamp = receivedDatagram.timestamp;
 
             float receivedTemperature = receivedDatagram.temperature;
 
-         //   printf(" received timestamp line 204 \n");
             int receivedId = receivedDatagram.id;
             int received_address_count = receivedDatagram.address_count;
             struct addr_entry receivedEntries[50];
@@ -229,21 +217,14 @@ int main(int argc, char **argv)
             {
                 receivedEntries[i] = receivedDatagram.address_list[i];
             }
-         //   printf("copied all entries line 209 \n");
 
-         //   printf("trying to see if received entries is full line 211\n");
             if (receivedEntries[49].sensor_addr.s_addr == 0 && receivedEntries[49].sensor_port == 0)
             {
-          //      printf("checked last value of received entries line 225\n");
                 for (int i = 0; i < 50; i++)
                 {
-              //      printf("portnumber of i is %d\n", receivedEntries[i].sensor_port);
-              //      printf("this sensor's portnumber is %d\n", thisSensor.sensor_port);
                     if (receivedEntries[i].sensor_addr.s_addr != 0 && receivedEntries[i].sensor_port != 0)
                     {
                         receivedEntries[i] = thisSensor;
-                        //printf("this sensors id is %d and its portnumber is %d and %d\n", id, thisSensor.sensor_port, portNumber);
-                        //printf("added this sensor's details to list, portNumber added is %d", receivedEntries[i].sensor_port);
                         received_address_count++;
                         break;
                     }
@@ -265,35 +246,29 @@ int main(int argc, char **argv)
             passMessageOn.timestamp = receivedTimeStamp;
             passMessageOn.temperature = receivedTemperature;
             passMessageOn.id = receivedId;
-            passMessageOn.address_count = received_address_count;
+            passMessageOn.address_count = received_address_count + 1;
             for (int i = 0; i < 50; i++)
             {
                 passMessageOn.address_list[i] = receivedEntries[i];
             }
 
-         //   printf("now passing message on\n");
-            // pass it on
             for (int i = 7; i < argc; i++)
             {
                 const char *address_port = argv[i];
                 const char *receiverPortString = strstr(address_port, ":");
                 int receiverPortNumber = atoi(receiverPortString + 1);
-              //  printf("portnumber being passed to is %d\n", receiverPortNumber);
 
-                if (search(receivedEntries, receiverPortNumber, 49) == 1)
+                if (search(receivedEntries, receiverPortNumber, 50) == 1)
                 {
-                   // printf("message not found. portnumber %d is being sent\n", receiverPortNumber);
                     receiver_addr.sin_family = AF_INET;
                     receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
                     receiver_addr.sin_port = htons(receiverPortNumber);
-                    // printf("iteration of for loop no. %d\n", i);
 
                     if (sendto(sockfd, &passMessageOn, sizeof(passMessageOn), 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) == -1)
                     {
                         perror("sendto failed");
                         exit(1);
                     }
-                    //printf("message successfully sent\n");
                 }
             }
             receiveBuffer[n] = '\0';
@@ -337,7 +312,7 @@ int main(int argc, char **argv)
 
 int search(struct addr_entry entries[], int PortNumber, int numberEntries)
 {
-    for (int i = 0; i <= numberEntries; i++)
+    for (int i = 0; i < numberEntries; i++)
     {
         if (entries[i].sensor_port == PortNumber)
         {
@@ -347,6 +322,7 @@ int search(struct addr_entry entries[], int PortNumber, int numberEntries)
     return 1;
 }
 
+// save the current time. This will primarily be used to see when a message was last sent by the tempsensor
 void updateLastUpdateTime()
 {
     gettimeofday(&lastUpdateTime, NULL);
@@ -354,13 +330,13 @@ void updateLastUpdateTime()
 
 // Function to check if the maximum update wait time has passed
 int hasMaxWaitTimePassed(int maxUpdateWait)
-{
+{   
     struct timeval currentTime;
     gettimeofday(&currentTime, NULL);
 
     // Calculate the time difference in microseconds
-    int diff = (currentTime.tv_sec - lastUpdateTime.tv_sec) * 1000000 + (currentTime.tv_usec - lastUpdateTime.tv_usec);
-
+    int diff = currentTime.tv_usec - lastUpdateTime.tv_usec;
+    
     // Compare with the maximum update wait time
     if (diff > maxUpdateWait)
     {
