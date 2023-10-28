@@ -201,20 +201,31 @@ int main(int argc, char **argv)
         // int len = sizeof(client_addr);
         addr_size = sizeof(client_addr);
         // printf("int len line 197\n");
-        int n = recvfrom(sockfd, &receiveBuffer, MAX_BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *)&client_addr, &addr_size);
-        while (n > 0)
+        while (1)
         {
+            int n = recvfrom(sockfd, &receiveBuffer, MAX_BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *)&client_addr, &addr_size);
         //    printf("entered infinite while loop \n");
         //    printf(" n>0 line 196\n");
+            if(n < 0) {
+                break;
+            }
             int position;
             memcpy(&receivedDatagram, &receiveBuffer, sizeof(receivedDatagram));
         //    printf("memcpy good line 199");
-            float receivedTemperature = receivedDatagram.temperature;
-        //    printf(" got temperature %f line 201", receivedTemperature);
+            char receivedHeader[4];
+            strcpy(receivedHeader, receivedDatagram.header);
+
+            //    printf(" got temperature %f line 201", receivedTemperature);
             struct timeval receivedTimeStamp;
             receivedTimeStamp = receivedDatagram.timestamp;
+
+            float receivedTemperature = receivedDatagram.temperature;
+
          //   printf(" received timestamp line 204 \n");
+            int receivedId = receivedDatagram.id;
+            int received_address_count = receivedDatagram.address_count;
             struct addr_entry receivedEntries[50];
+
             for (int i = 0; i < 50; i++)
             {
                 receivedEntries[i] = receivedDatagram.address_list[i];
@@ -232,9 +243,9 @@ int main(int argc, char **argv)
                     if (receivedEntries[i].sensor_addr.s_addr != 0 && receivedEntries[i].sensor_port != 0)
                     {
                         receivedEntries[i] = thisSensor;
-                        printf("this sensors id is %d and its portnumber is %d and %d\n", id, thisSensor.sensor_port, portNumber);
-                        printf("added this sensor's details to list, portNumber added is %d", receivedEntries[i].sensor_port);
-                        position = i;
+                        //printf("this sensors id is %d and its portnumber is %d and %d\n", id, thisSensor.sensor_port, portNumber);
+                        //printf("added this sensor's details to list, portNumber added is %d", receivedEntries[i].sensor_port);
+                        received_address_count++;
                         break;
                     }
                 }
@@ -247,15 +258,15 @@ int main(int argc, char **argv)
                     receivedEntries[i] = receivedEntries[i + 1];
                 }
                 receivedEntries[49] = thisSensor;
-                position = 49;
             }
 
             // create new datagram
             struct datagram_format passMessageOn;
-            passMessageOn.temperature = receivedTemperature;
+            strcpy(passMessageOn.header, receivedHeader);
             passMessageOn.timestamp = receivedTimeStamp;
-            passMessageOn.id = id;
-            passMessageOn.address_count = position;
+            passMessageOn.temperature = receivedTemperature;
+            passMessageOn.id = receivedId;
+            passMessageOn.address_count = received_address_count;
             for (int i = 0; i < 49; i++)
             {
                 passMessageOn.address_list[i] = receivedEntries[i];
@@ -286,7 +297,8 @@ int main(int argc, char **argv)
                     //printf("message successfully sent\n");
                 }
             }
-            n = n - 1;
+            receiveBuffer[n] = '\0';
+            memset(receiveBuffer, 0, sizeof(receiveBuffer));
         }
 
         pthread_mutex_lock(&shared->mutex);
