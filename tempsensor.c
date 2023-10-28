@@ -135,7 +135,7 @@ int main(int argc, char **argv)
     if (inet_pton(AF_INET, "127.0.0.1", &(thisSensor.sensor_addr)) <= 0)
     {
         perror("Invalid address");
-        return 1; 
+        return 1;
     }
     thisSensor.sensor_port = portNumber;
 
@@ -199,7 +199,8 @@ int main(int argc, char **argv)
         while (1)
         {
             int n = recvfrom(sockfd, &receiveBuffer, MAX_BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *)&client_addr, &addr_size);
-            if(n <= 0) {
+            if (n <= 0)
+            {
                 break;
             }
             int position;
@@ -333,12 +334,12 @@ void updateLastUpdateTime()
 
 // Function to check if the maximum update wait time has passed
 int hasMaxWaitTimePassed(int maxUpdateWait)
-{   
+{
     struct timeval currentTime;
     gettimeofday(&currentTime, NULL);
 
     // Calculate the time difference in microseconds
-    int timePassed_sec = (currentTime.tv_sec - lastUpdateTime.tv_sec)*1000000;
+    int timePassed_sec = (currentTime.tv_sec - lastUpdateTime.tv_sec) * 1000000;
     int timePassed_usec = currentTime.tv_usec - lastUpdateTime.tv_usec;
     int timePassed = timePassed_sec + timePassed_usec;
     // Compare with the maximum update wait time
