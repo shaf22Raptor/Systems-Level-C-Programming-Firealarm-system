@@ -72,7 +72,9 @@ int main(int argc, char **argv)
 
     struct timespec condWait;
     condWait.tv_sec = 0;
+    condWait.tv_nsec = 0;
     condWait.tv_sec += max_wait_condvar / 1000000;
+    condWait.tv_nsec += (max_wait_condvar % 1000000) * 1000;
     // Shared memory
     //  initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
@@ -335,11 +337,11 @@ int hasMaxWaitTimePassed(int maxUpdateWait)
     gettimeofday(&currentTime, NULL);
 
     // Calculate the time difference in microseconds
-    int diff_sec = (currentTime.tv_sec - lastUpdateTime.tv_sec)*1000000;
-    int diff_usec = currentTime.tv_usec - lastUpdateTime.tv_usec;
-    int diff = diff_sec + diff_usec;
+    int timePassed_sec = (currentTime.tv_sec - lastUpdateTime.tv_sec)*1000000;
+    int timePassed_usec = currentTime.tv_usec - lastUpdateTime.tv_usec;
+    int timePassed = timePassed_sec + timePassed_usec;
     // Compare with the maximum update wait time
-    if (diff > maxUpdateWait)
+    if (timePassed > maxUpdateWait)
     {
         // If the time difference is greater than the max update wait, return 1
         return 1;
