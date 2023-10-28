@@ -336,7 +336,7 @@ int main(int argc, char **argv) {
                         struct sockaddr_in new_door_addr;
                         memset(&new_door_addr, 0, sizeof(new_door_addr));
                         new_door_addr.sin_family = AF_INET;
-                        new_door_addr.sin_addr.s_addr = new_door_data->door_addr; // assuming door_addr is in network byte order
+                        new_door_addr.sin_addr = new_door_data->door_addr; // assuming door_addr is in network byte order
                         new_door_addr.sin_port = new_door_data->door_port;
 
                         // Create a new socket for TCP connection to the new door.
@@ -360,11 +360,6 @@ int main(int argc, char **argv) {
                             close(new_door_sock); // Close the socket whether or not the send was successful.
                         }
 
-
-                        // work on this bit till 1 and then start cleaning up code.
-
-
-
                         door_confirmation confirmation;
                         memcpy(confirmation.header, "DREG", 4);
                         confirmation.door_addr = door_data->door_addr;
@@ -376,17 +371,22 @@ int main(int argc, char **argv) {
                             perror("sendto(overseer) failed");
                             continue;
                         }
-                    } else {
+                    } 
+                    
+                    else {
                         printf("Received unknown datagram. Ignoring.\n");
                     }
                 }
+                
                 else {
                     printf("Fire alarm already triggered. Ignoring repeated alert.\n");
                 }
             }
         }
+        
         munmap(shm, shm_stat.st_size);
         close(udp_sockfd); // UDP socket for fire alarm system
         close(overseer_sock); // TCP socket for communication with the overseer
         return 0;  // Successful exit
+    }
 }
