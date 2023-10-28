@@ -125,7 +125,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // fcntl(sockfd, F_SETFL, O_NONBLOCK);
+    int flags = fcntl(sockfd, F_GETFL, 0);
+    fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 
     // Create addr_entry instance containing this sensor's details
     struct addr_entry thisSensor;
@@ -139,19 +140,18 @@ int main(int argc, char **argv)
     // mutex lock for normal operation
     pthread_mutex_lock(&shared->mutex);
     float oldTemp = shared->temperature;
+    float currentTemp;
     int firstIteration = 1; // see if this is first iteration of for loop. 1 for true, 0 for false
     for (;;)
     {
-        firstIteration = 0;
-        int enteredifagain = 0;
-        float currentTemp = shared->temperature;
+        currentTemp = shared->temperature;
+        shared->temperature;
+        updateLastUpdateTime();
         pthread_mutex_unlock(&shared->mutex);
-        if (currentTemp != oldTemp || firstIteration == 1 || hasMaxWaitTimePassed(max_wait_update))
+        if (currentTemp != oldTemp || firstIteration == 1 || hasMaxWaitTimePassed(max_wait_update) == 1)
         {
-            if (enteredifagain == 1)
-            {
-                printf("entered if again \n");
-            }
+            firstIteration = 0;
+            oldTemp = currentTemp;
             // construct a struct that contains sensor's id, temp and current time and address list of only this sensor
 
             // construct header
@@ -197,7 +197,6 @@ int main(int argc, char **argv)
             }
             // printf("left for loop line 195\n");
         }
-        enteredifagain = 1;
         // int len = sizeof(client_addr);
         addr_size = sizeof(client_addr);
         // printf("int len line 197\n");
@@ -206,7 +205,7 @@ int main(int argc, char **argv)
             int n = recvfrom(sockfd, &receiveBuffer, MAX_BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *)&client_addr, &addr_size);
         //    printf("entered infinite while loop \n");
         //    printf(" n>0 line 196\n");
-            if(n < 0) {
+            if(n <= 0) {
                 break;
             }
             int position;
@@ -233,7 +232,7 @@ int main(int argc, char **argv)
          //   printf("copied all entries line 209 \n");
 
          //   printf("trying to see if received entries is full line 211\n");
-            if (receivedEntries[50].sensor_addr.s_addr != 0 && receivedEntries[50].sensor_port != 0)
+            if (receivedEntries[49].sensor_addr.s_addr == 0 && receivedEntries[49].sensor_port == 0)
             {
           //      printf("checked last value of received entries line 225\n");
                 for (int i = 0; i < 50; i++)
@@ -253,7 +252,7 @@ int main(int argc, char **argv)
 
             else
             {
-                for (int i = 0; i < 49; i++)
+                for (int i = 0; i < 50; i++)
                 {
                     receivedEntries[i] = receivedEntries[i + 1];
                 }
@@ -267,7 +266,7 @@ int main(int argc, char **argv)
             passMessageOn.temperature = receivedTemperature;
             passMessageOn.id = receivedId;
             passMessageOn.address_count = received_address_count;
-            for (int i = 0; i < 49; i++)
+            for (int i = 0; i < 50; i++)
             {
                 passMessageOn.address_list[i] = receivedEntries[i];
             }
@@ -338,7 +337,7 @@ int main(int argc, char **argv)
 
 int search(struct addr_entry entries[], int PortNumber, int numberEntries)
 {
-    for (int i = 0; i < numberEntries; i++)
+    for (int i = 0; i <= numberEntries; i++)
     {
         if (entries[i].sensor_port == PortNumber)
         {
@@ -360,7 +359,7 @@ int hasMaxWaitTimePassed(int maxUpdateWait)
     gettimeofday(&currentTime, NULL);
 
     // Calculate the time difference in microseconds
-    long int diff = (currentTime.tv_sec - lastUpdateTime.tv_sec) * 1000000 + (currentTime.tv_usec - lastUpdateTime.tv_usec);
+    int diff = (currentTime.tv_sec - lastUpdateTime.tv_sec) * 1000000 + (currentTime.tv_usec - lastUpdateTime.tv_usec);
 
     // Compare with the maximum update wait time
     if (diff > maxUpdateWait)
