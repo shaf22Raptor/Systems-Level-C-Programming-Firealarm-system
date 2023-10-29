@@ -34,15 +34,15 @@ int main(int argc, char **argv)
         exit(1);
     }
     // intialise parameters for system by converting from char[] to int when necessary
-    int id = atoi(argv[1]);
-    int waitTime = atoi(argv[2]);
+    const int id = atoi(argv[1]);
+    const int waitTime = atoi(argv[2]);
     const char *shm_path = argv[3];
-    off_t shm_offset = (off_t)atoi(argv[4]);
+    const off_t shm_offset = (off_t)atoi(argv[4]);
     const char *overseer_port = argv[5]; // temporary variable type
 
     // Isolate port number from {ipAddress : port number}
     const char *portString= strstr(overseer_port, ":");
-    int portNumber = atoi(portString + 1);
+    const int portNumber = atoi(portString + 1);
 
     /*********************************************
     Code to connect to shared memory with simulator
@@ -88,32 +88,15 @@ int main(int argc, char **argv)
 
     // Define server address and port
     struct sockaddr_in serverAddr;
-    //configureServerAddressForClient(serverAddr, "127.0.0.1", int server_port)
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    if (inet_pton(AF_INET, "127.0.0.1",&serverAddr.sin_addr) != 1) {
-        perror("inet_pton()");
-        exit(1);
-    }
-
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(portNumber);
-
-    //configureServerAddress(&serverAddr, "127.0.0.1", *overseer_port);
+    configureServerAddressForClient(serverAddr, "127.0.0.1");
 
     // Establish connection and corresponding error handling
-    int connection_status = establishConnection(sockfd, serverAddr, programName);
-    if (connection_status == 1) {
-        printf("cardreader has failed\n");
-        exit(1);
-    }
+    establishConnection(sockfd, serverAddr, portNumber);
 
     // Initialisation message to overseer
     char helloMessage[50];
     sprintf(helloMessage, "CARDREADER %d HELLO#", id);
-    int sent = sendData(sockfd, helloMessage);
-    if (sent == 1) {
-        exit(1);
-    }
+    sendData(sockfd, helloMessage);
 
     if (shutdown(sockfd, SHUT_RDWR) < 0) {
         perror("Error in shutting down");
@@ -131,40 +114,19 @@ int main(int argc, char **argv)
         if (shared->scanned[0] != '\0') {
 
             int sockfd2 = createSocket();
-            if (sockfd2 == 1) {
-                printf("socket creation failed");
-                exit(1);
-            }
 
             // Define server address and port
             struct sockaddr_in serverAddr;
-            memset(&serverAddr, 0, sizeof(serverAddr));
-            if (inet_pton(AF_INET, "127.0.0.1",&serverAddr.sin_addr) != 1) {
-                perror("inet_pton()");
-                exit(1);
-            }
-
-            serverAddr.sin_family = AF_INET;
-            serverAddr.sin_port = htons(portNumber);
-
-            //configureServerAddress(&serverAddr, "127.0.0.1", *overseer_port);
+            configureServerAddressForClient(serverAddr, "127.0.0.1");
 
             // Establish connection and corresponding error handling
-            int connection_status = establishConnection(sockfd2, serverAddr, programName);
-            if (connection_status == 1) {
-                printf("cardreader has failed\n");
-                exit(1);
-            }
+            establishConnection(sockfd2, serverAddr, portNumber);
 
             char scannedMessage[50];
 
             // SEND SCANNED DATA
             sprintf(scannedMessage, "CARDREADER %d SCANNED %s#", id, shared->scanned);
-            int sendMessage = sendData(sockfd2, scannedMessage);
-            if(sendMessage == 1) {
-                perror("send()");
-                exit(1);
-            }
+            sendData(sockfd2, scannedMessage);
 
             /*****************************************
             ACT ACCORDING TO HOW OVERSEER RESPONDS

@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     /* intialise parameters for system by converting from char[] to int when necessary */
     const int resendDelay = atoi(argv[1]);
     const char *shm_path = argv[2];
-    off_t shm_offset = (off_t)atoi(argv[3]);
+    const off_t shm_offset = (off_t)atoi(argv[3]);
     const char *firealarm_address_port = argv[4];
 
     /* Isolate port number from {ipAddress : port number} */
