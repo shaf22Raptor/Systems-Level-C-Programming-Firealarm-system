@@ -15,9 +15,9 @@
 #define BUFFER_SIZE 16
 #define RECEIVED_BUFFER_SIZE 1024
 
-void exitCardreader() {
-    exit(1);
-}
+
+const char programName[] = "cardreader";
+
 
 // Struct used for card reader shared memory as specified
 typedef struct {
@@ -53,7 +53,6 @@ int main(int argc, char **argv)
 
     // initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
-   // printf("\n\nshm_open executed\n");
 
     // handle failed shm_open
     if (shm_fd == -1) {
@@ -155,7 +154,7 @@ int main(int argc, char **argv)
 
             if (shutdown(sockfd2, SHUT_RDWR) < 0) {
                 perror("Error in shutting down");
-                return 1; // Return an error code if shutdown fails
+            return 1; // Return an error code if shutdown fails
             }
             close(sockfd2);
         }
