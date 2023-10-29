@@ -178,14 +178,14 @@ int main(int argc, char **argv) {
             shared->status = 'o';
             pthread_cond_signal(&shared->cond_start);  
             pthread_mutex_unlock(&shared->mutex);
-            strcpy(response, "OPENING#\n");
+            strncpy(response, "OPENING#\n", sizeof(response));
         } else if (strncmp(buffer, "CLOSE#", 6) == 0) {
             /* Close door */
             pthread_mutex_lock(&shared->mutex);
             shared->status = 'c';
             pthread_cond_signal(&shared->cond_start);  
             pthread_mutex_unlock(&shared->mutex);
-            strcpy(response, "CLOSING#\n");
+            strncpy(response, "CLOSING#\n", sizeof(response));
         } else if (strncmp(buffer, "OPEN_EMERG#", 11) == 0) {
             /* Emergency command to forcefully open the door */
             if (shared->status == 'C' || shared->status == 'c') {  
@@ -199,9 +199,9 @@ int main(int argc, char **argv) {
                 }
 
                 pthread_mutex_unlock(&shared->mutex);
-                strcpy(response, "EMERGENCY_MODE#\n");
+                strncpy(response, "EMERGENCY_MODE#\n", sizeof(response));
             } else if (shared->status == 'O') {
-                strcpy(response, "EMERGENCY_MODE#\n");
+                strncpy(response, "EMERGENCY_MODE#\n", sizeof(response));
             }
         } else if (strncmp(buffer, "CLOSE_SECURE#", 13) == 0) {
             /* Command to close the door securely in response to a security protocol */
@@ -216,14 +216,14 @@ int main(int argc, char **argv) {
                 }
 
                 pthread_mutex_unlock(&shared->mutex);
-                strcpy(response, "SECURE_MODE#\n");
+                strncpy(response, "SECURE_MODE#\n", sizeof(response));
             } else if (shared->status == 'C') {
-                strcpy(response, "SECURE_MODE#\n");
+                strncpy(response, "SECURE_MODE#\n", sizeof(response));
             }   
         } else {
             /* Handle unrecognized commands */
             fprintf(stderr, "Invalid command: %s\n", buffer);
-            strcpy(response, "ERROR Invalid command#\n"); 
+            strncpy(response, "ERROR Invalid command#\n", sizeof(response)); 
         }
 
         send_msg(client, response);
