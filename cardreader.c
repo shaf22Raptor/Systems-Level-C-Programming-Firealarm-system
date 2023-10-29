@@ -15,7 +15,9 @@
 #define BUFFER_SIZE 16
 #define RECEIVED_BUFFER_SIZE 1024
 
-const char programName[] = "cardreader";
+void exitCardreader() {
+    exit(1);
+}
 
 // Struct used for card reader shared memory as specified
 typedef struct {
@@ -33,6 +35,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: {id} {wait time (in microseconds)} {shared memory path} {shared memory offset} {overseer address:port}");
         exit(1);
     }
+
     // intialise parameters for system by converting from char[] to int when necessary
     const int id = atoi(argv[1]);
     const int waitTime = atoi(argv[2]);
@@ -64,7 +67,6 @@ int main(int argc, char **argv)
         perror("fstat()");
         exit(1);
     }
- //   printf("Shared memory file size: %ld\n", shm_stat.st_size);
 
     // mmap 
     char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
@@ -122,11 +124,10 @@ int main(int argc, char **argv)
             // Establish connection and corresponding error handling
             establishConnection(sockfd2, serverAddr, portNumber);
 
+            // Buffer to store scanned message
             char scannedMessage[50];
-
-            // SEND SCANNED DATA
             sprintf(scannedMessage, "CARDREADER %d SCANNED %s#", id, shared->scanned);
-            sendData(sockfd2, scannedMessage);
+            sendData(sockfd2, scannedMessage);                                          // SEND SCANNED DATA
 
             /*****************************************
             ACT ACCORDING TO HOW OVERSEER RESPONDS
@@ -134,11 +135,12 @@ int main(int argc, char **argv)
 
             // Logic to recieve data
             char receiveBuf[RECEIVED_BUFFER_SIZE];
-            int messageReceived = receiveData(sockfd, receiveBuf);
+            int messageReceived = receiveData(sockfd2, receiveBuf);
             // Logic to see handle error or connection close
             if (messageReceived == -1 || messageReceived == 0) {
                 shared->response = 'N';
             }
+
             // Logic to process data from server
             else {
                 receiveBuf[messageReceived] = '\0'; // Null terminate received data
@@ -151,9 +153,9 @@ int main(int argc, char **argv)
             }
             pthread_cond_signal(&shared->response_cond);
 
-            if (shutdown(sockfd, SHUT_RDWR) < 0) {
+            if (shutdown(sockfd2, SHUT_RDWR) < 0) {
                 perror("Error in shutting down");
-            return 1; // Return an error code if shutdown fails
+                return 1; // Return an error code if shutdown fails
             }
             close(sockfd2);
         }
@@ -161,8 +163,6 @@ int main(int argc, char **argv)
     }
 
     pthread_mutex_unlock(&shared->mutex);
-
-    
 
     //general cleanup with error handling
     if (shm_unlink(shm_path) == -1) {
@@ -188,8 +188,6 @@ int main(int argc, char **argv)
     if (munmap(shm, shm_stat.st_size) == -1) {
         perror("munmap()");
     }
-
     close(shm_fd);
-
     return 0;
 }

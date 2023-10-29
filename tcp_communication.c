@@ -8,6 +8,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#include "cardreader.c"
+
 int createSocket() {
     // Create a socket, set up the server address, and connect
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);   // Create socket for client and corresponding error handling
@@ -27,10 +29,10 @@ void configureServerAddressForClient(struct sockaddr_in addr, const char server_
 }
 
 void establishConnection(int socket, struct sockaddr_in serverAddr, int portNumber) {
-    
+
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(portNumber);
-    
+
     int connection_status = connect(socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
     if (connection_status == -1) {
         perror("connect()");
