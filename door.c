@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
         pthread_mutex_unlock(&shared->mutex);
 
         /* Processing client commands and preparing a response */
-        char response[100]; // Buffer to hold responses to send back.
+        char response[100]; /* Buffer to hold responses to send back */
         if (strncmp(buffer, "STATE#", 6) == 0) {
             /* Query door state */
             pthread_mutex_lock(&shared->mutex);                 
