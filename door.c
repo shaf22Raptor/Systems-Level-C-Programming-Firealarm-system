@@ -94,18 +94,18 @@ int main(int argc, char **argv) {
     char *overseer_ip = strtok(overseer_addr_port, ":");
     char *overseer_port_str = strtok(NULL, ":");
     if (!overseer_ip || !overseer_port_str) {
-        fprintf(stderr, "Error: Overseer address should be in the format ip:port\n");
+        perror("Error: Overseer address should be in the format ip:port\n");
         exit(EXIT_FAILURE);
     }
 
     int overseer_port = atoi(overseer_port_str);
     if (overseer_port == 0) {
-        fprintf(stderr, "Error: Invalid port number\n");
+        perror("Error: Invalid port number\n");
         exit(EXIT_FAILURE);
     }
 
     if (inet_pton(AF_INET, overseer_ip, &overseer_addr.sin_addr) <= 0) {
-        fprintf(stderr, "Invalid overseer IP address\n");
+        perror( "Invalid overseer IP address\n");
         exit(EXIT_FAILURE);
     }
     overseer_addr.sin_port = htons(overseer_port);
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
             /* Handle errors or connection closure */
             if (bytes == 0) {
                 /* Connection closed */
-                printf("Client disconnected\n");
+                perror("Client disconnected\n");
             } else {
                 perror("recv failed");
             }

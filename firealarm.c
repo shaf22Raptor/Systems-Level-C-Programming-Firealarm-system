@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
     char *udp_ip = strtok(udp_addr_port, ":");
     char *udp_port_str = strtok(NULL, ":");
     if (udp_port_str == NULL) {
-        fprintf(stderr, "Invalid overseer address:port format.\n");
+        perror("Invalid overseer address:port format.\n");
         exit(EXIT_FAILURE);
     }
     int udp_port = atoi(udp_port_str);          /* Convert port from string to integer */
@@ -142,8 +142,8 @@ int main(int argc, char **argv) {
     
     /* Validate and convert IP address from text to binary */
     if (inet_aton(udp_ip, &udp_servaddr.sin_addr) == 0) { 
-        fprintf(stderr, "Invalid IP address format for UDP.\n");
-        exit(EXIT_FAILURE);
+        perror("Invalid IP address format for UDP");
+        return EXIT_FAILURE;
     }
 
     /* UDP socket creation */
@@ -167,18 +167,18 @@ int main(int argc, char **argv) {
     char *overseer_ip = strtok(overseer_addr_port, ":");
     char *overseer_port_str = strtok(NULL, ":");
     if (!overseer_ip || !overseer_port_str) {
-        fprintf(stderr, "Error: Overseer address should be in the format ip:port\n");
+        perror("Error: Overseer address should be in the format ip:port\n");
         exit(EXIT_FAILURE);
     }
 
     int overseer_port = atoi(overseer_port_str);
     if (overseer_port == 0) {
-        fprintf(stderr, "Error: Invalid port number\n");
+        perror("Error: Invalid port number\n");
         exit(EXIT_FAILURE);
     }
 
     if (inet_pton(AF_INET, overseer_ip, &overseer_addr.sin_addr) <= 0) {
-        fprintf(stderr, "Invalid overseer IP address\n");
+        perror("Invalid overseer IP address\n");
         exit(EXIT_FAILURE);
     }
     overseer_addr.sin_port = htons(overseer_port);
@@ -225,7 +225,7 @@ int main(int argc, char **argv) {
         
         /* Check if data is received */
         else if (rec_size == 0) {
-            printf("No data received.\n");
+            perror("No data received.\n");
             continue; 
         }
 
