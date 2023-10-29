@@ -25,10 +25,10 @@ firealarm: firealarm.o
 firealarm.o: firealarm.c
 	$(CC) $(CFLAGS) -c firealarm.c	
 
-callpoint: callpoint.o udp_communication.o
-	$(CC) $(CFLAGS) -o callpoint callpoint.o udp_communication.o $(LDFLAGS)
+callpoint: callpoint.o 
+	$(CC) $(CFLAGS) -o callpoint callpoint.o $(LDFLAGS)
 
-callpoint.o: callpoint.c udp_communication.h
+callpoint.o: callpoint.c
 	$(CC) $(CFLAGS) -c callpoint.c
 
 tempsensor: tempsensor.o
