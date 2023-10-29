@@ -37,8 +37,11 @@ tempsensor: tempsensor.o
 tempsensor.o: tempsensor.c
 	$(CC) $(CFLAGS) -c tempsensor.c	
 
-udp_communication.o: udp_communication.c udp_communication.h
-	$(CC) $(CFLAGS) -c udp_communication.c
+overseer: overseer.o
+	$(CC) $(CFLAGS) -o overseer overseer.o $(LDFLAGS)
+
+overseer.o: overseer.c
+	$(CC) $(CFLAGS) -c overseer.c
 
 clean:
 	rm -f cardreader door callpoint firealarm*.o
