@@ -122,8 +122,8 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    shm_alarm *shared = (shm_alarm *)(shm + shm_offset);  /* Pointer to the shared structure */
-    shared->alarm = '-';                       /* Initially, the door is considered closed */
+    shm_alarm *shared = (shm_alarm *)(shm + shm_offset);    /* Pointer to the shared structure */
+    shared->alarm = '-';                                    /* Initially, the door is considered closed */
         
     /* Network setup for UDP */
     struct sockaddr_in udp_servaddr;
@@ -351,8 +351,7 @@ int main(int argc, char **argv) {
                         confirmation.door_addr = door_data->door_addr;
                         confirmation.door_port = door_data->door_port;
 
-                        ssize_t sent_size = sendto(udp_sockfd, &confirmation, sizeof(confirmation), 0, 
-                                                (struct sockaddr*)&overseer_addr, sizeof(overseer_addr));
+                        ssize_t sent_size = sendto(udp_sockfd, &confirmation, sizeof(confirmation), 0, (struct sockaddr*)&overseer_addr, sizeof(overseer_addr));
                         if (sent_size < 0) {
                             perror("sendto(overseer) failed");
                             continue;

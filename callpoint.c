@@ -7,6 +7,7 @@
  *
  *pointers used on command line arguments and certain shared memory constructs
 */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
