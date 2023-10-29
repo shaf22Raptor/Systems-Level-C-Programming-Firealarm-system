@@ -31,39 +31,80 @@ typedef struct {
     char security_alarm[10];
 
     // Fire alarm unit struct
-    char alarm[10];
+    char shm_alarm[10];
 
     // Card reader controller struct
     struct {
-        char scanned[MAX_CARD_READERS][100];
-        char response[MAX_CARD_READERS][100];
+        char scanned[16];
         pthread_mutex_t mutex;
         pthread_cond_t scanned_cond;
-    } card_reader;
+        char response; // 'Y' or 'N' (or '\0' at first)
+        pthread_cond_t response_cond;
+    } shm_card_reader;
 
     // Door controller struct
     struct {
-        char status[MAX_DOORS][DOOR_STATUS_LEN];
+        char status; // 'O' for open, 'C' for closed, 'o' for opening, 'c' for closing
         pthread_mutex_t mutex;
         pthread_cond_t cond_start;
         pthread_cond_t cond_end;
-    } door;
+    } shm_door;
 
     // Fire alarm call-point controller struct
     struct {
-        char status[MAX_CALL_POINTS][CALL_POINT_STATUS_LEN];
+        char status; // '-' for inactive, '*' for active
         pthread_mutex_t mutex;
         pthread_cond_t cond;
-    } call_point;
+    } shm_call_point;
 
     // Temperature sensor controller struct
     struct {
-        float temperature[MAX_TEMP_SENSORS];
+        float temperature;
         pthread_mutex_t mutex;
         pthread_cond_t cond;
-    } temp_sensor;
+    } shm_temp_sensor;
 
 } SharedMemory;
+
+struct {
+    int doorOpenDuration;
+    int datagramDelay;
+    char* authorisationFile;
+    char* connectionsFile;
+    char* layoutFile;
+} overseer;
+
+struct {
+    int tempThreshold;
+    int minDetections;
+    int detectionPeriod;
+    int reserved;
+} firealarm;
+
+struct {
+    int id;
+    int waitTime;
+} cardreader;
+
+struct {
+    int id;
+    int mode;
+    int closeOpenTime;
+} door;
+
+struct {
+    int reserved;
+    int resendDelay;
+} callpoint;
+
+struct {
+    int id;
+    int maxCondvar;
+    int maxUpdate;
+    char receiverList[];
+} tempsensor;
+
+
 
 // Initialize the shared memory space and components
 void initializeSharedMemory() {
@@ -143,11 +184,41 @@ void readScenarioFile(const char* scenarioFile) {
         exit(1);
     }
 
-    char line[256];
-    while (fgets(line, sizeof(line), file)) {
-        // Process each line of the scenario file
-        // ...
-    }
+    // 
+
+    //OVERSEER
+    //door open duration
+    // dgram resend delay
+    // authorisation file
+    // connections file
+    // layout file
+
+    // firealarm
+    // temp threshold
+    // min detections
+    // detection period
+    // reserved
+
+    // cardreader
+    // id
+    // wait time in ms
+
+    // door
+    // id
+    // fail mode
+    // door toggle ms
+
+    // callpoint
+    // reserved
+    // resend in ms
+
+    // tempsensor
+    // id
+    // max condvar ms
+    // max update ms
+    // receiver list
+
+    // SCENARIO SECTION
 
     fclose(file);
 }
