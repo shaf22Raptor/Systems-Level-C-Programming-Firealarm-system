@@ -6,7 +6,6 @@
  * with an overseer program while operating autonomously to guarantee redundancy.
 */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
