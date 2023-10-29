@@ -1,7 +1,7 @@
 /* 
  * This is the main executable file for a Fire Alarm Unit in safety-critical applications.
  * It maintains vigilant monitoring for signs of fire emergencies, either through manual triggers 
- * or temperature sensors, and orchestrates the necessary response protocols, including 
+ * or temperature sensors, and does the necessary response protocols, including 
  * signalling the fire alarms and opening fail-safe security doors. It ensures communication 
  * with an overseer program while operating autonomously to guarantee redundancy.
 */
