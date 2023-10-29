@@ -17,28 +17,28 @@
 #define MAX_DOORS 100
 #define MAX_DETECTIONS 50
 
-// Shared memory structure
+/* Shared memory structure */
 typedef struct {
     char alarm; 
     pthread_mutex_t mutex;
     pthread_cond_t cond;
 } shm_alarm;
 
-// Door registration datagram structure
+/* Door registration datagram structure */
 typedef struct {
     char header[4]; // {'D', 'O', 'O', 'R'}
     struct in_addr door_addr;
     in_port_t door_port;
 } door_datagram;
 
-// Temperature sensor controller datagrams
+/* Temperature sensor controller datagrams */
 struct addr_entry {
   struct in_addr sensor_addr;
   in_port_t sensor_port;
 };
 
 struct datagram_format {
-  char header[4]; // {'T', 'E', 'M', 'P'}
+  char header[4]; /* {'T', 'E', 'M', 'P'} */
   struct timeval timestamp;
   float temperature;
   uint16_t id;
@@ -46,50 +46,49 @@ struct datagram_format {
   struct addr_entry address_list[50];
 };
 
-// Door confirmation datagram structure
+/* Door confirmation datagram structure */
 typedef struct {
-    char header[4]; // {'D', 'R', 'E', 'G'}
+    char header[4]; /* {'D', 'R', 'E', 'G'} */
     struct in_addr door_addr;
     in_port_t door_port;
 } door_confirmation;
 
-// Door list
+/* Door list */
 struct in_addr door_addresses[MAX_DOORS];
 in_port_t door_ports[MAX_DOORS];
 int door_count = 0;
 
-// Detection timestamps list
+/* Detection timestamps list */
 long long detection_timestamps[MAX_DETECTIONS];
 int detection_count = 0;
 
-// Fire emergency datagram
+/* Fire emergency datagram */
 typedef struct  {
-    char header[4]; // {'F', 'I', 'R', 'E'}
+    char header[4]; /* {'F', 'I', 'R', 'E'} */
 } fire_alarmdata;
 
-//Global shared
+/* Global variables */
 shm_alarm *shared;
-int overseer_sock; // Global variable for the overseer socket connection
+int overseer_sock; 
 struct sockaddr_in overseer_addr;
 int fire_alarm_triggered = 0;
 
-// Main function
+/* Main function */
 int main(int argc, char **argv) {
-    printf("Program started\n");
-
     if (argc != 9) {
         fprintf(stderr, "Usage: firealarm {address:port} {temperature threshold} {min detections} {detection period (in microseconds)} {reserved argument} {shared memory path} {shared memory offset} {overseer address:port}\n");
         return 1;
     }
 
-    // Initialisation of variables from arguments
+    /* Initialisation of variables from arguments */
     int temp_threshold = atoi(argv[2]);
     int min_detections = atoi(argv[3]);
     int detection_period = atoi(argv[4]);
     char *shm_path = argv[6]; 
     int shm_offset = atoi(argv[7]); 
     char *overseer_addr_port = argv[8];
-    printf("Variables initialized from arguments\n"); // debug message
+    char *udp_addr_port = argv[1]; 
+
     /* Shared memory initialisation */
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
     if (shm_fd == -1) {
@@ -97,7 +96,8 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    struct stat shm_stat; /* To obtain file size */
+    /* Obtain file size */
+    struct stat shm_stat; 
     if (fstat(shm_fd, &shm_stat) == -1) {
         perror("fstat()");
         exit(1);
@@ -111,16 +111,13 @@ int main(int argc, char **argv) {
     }
 
     shared = (shm_alarm *)(shm + shm_offset);  /* Pointer to the shared structure */
-    shared->alarm = '-';                               /* Initially, the door is considered closed */
-    
-    printf("Shared memory initialized\n"); // debug message
-    
-    // Extracting UDP address and port from the command line
-    char *udp_addr_port = argv[1]; 
+    shared->alarm = '-';                       /* Initially, the door is considered closed */
+        
+    /* Network setup for UDP */
     struct sockaddr_in udp_servaddr;
-    memset(&udp_servaddr, 0, sizeof(udp_servaddr)); // Ensure struct is empty
+    memset(&udp_servaddr, 0, sizeof(udp_servaddr)); /* Ensure struct is empty */
 
-    // Set properties for the address structure
+    /* Set up Properties for address structure */
     udp_servaddr.sin_family = AF_INET;
     char *udp_ip = strtok(udp_addr_port, ":");
     char *udp_port_str = strtok(NULL, ":");
@@ -128,31 +125,27 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Invalid overseer address:port format.\n");
         exit(EXIT_FAILURE);
     }
-    int udp_port = atoi(udp_port_str); // Convert port from string to integer
-    udp_servaddr.sin_port = htons(udp_port); // Convert port number to network byte order
-
-    // Validate and convert IP address from text to binary form
+    int udp_port = atoi(udp_port_str);          /* Convert port from string to integer */
+    udp_servaddr.sin_port = htons(udp_port);    /* Convert port number to network byte order */
+    
+    /* Validate and convert IP address from text to binary */
     if (inet_aton(udp_ip, &udp_servaddr.sin_addr) == 0) { 
         fprintf(stderr, "Invalid IP address format for UDP.\n");
         exit(EXIT_FAILURE);
     }
 
-    // UDP socket creation (SOCK_DGRAM for UDP)
+    /* UDP socket creation */
     int udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0); 
     if (udp_sockfd < 0) {
         perror("Cannot create UDP socket");
         return EXIT_FAILURE;
     }
 
-    printf("UDP Socket created \n"); // Debug message
-
-    // Binding the UDP socket to the local address and port
+    /* Binding the UDP socket to the local address and port */
     if (bind(udp_sockfd, (struct sockaddr*)&udp_servaddr, sizeof(udp_servaddr)) < 0) {
         perror("bind failed for UDP socket");
         exit(EXIT_FAILURE);
     }
-
-    printf("UDP Socket bound to address\n"); // debug message
 
     /* Connect to overseer and send initialisation message */
     memset(&overseer_addr, 0, sizeof(overseer_addr));
@@ -191,89 +184,76 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Connection to overseer done\n"); // debug message
-
-    // Prepare the initialisation message
-    char init_message[BUFFER_SIZE];  // Buffer for the initialisation message.
+    /* Prepare the initialisation message */
+    char init_message[BUFFER_SIZE]; /* Buffer for the initialisation message */
     snprintf(init_message, sizeof(init_message), "FIREALARM %s:%d HELLO#", udp_ip, udp_port);
     
-    // Send the initialisation message to the overseer
+    /* Send the initialisation message to the overseer */
     ssize_t bytes_sent = send(overseer_sock, init_message, strlen(init_message), 0);
     if (bytes_sent < 0) {
         perror("Failed to send initialisation message to overseer");
-        close(overseer_sock);  // Close the overseer socket
+        close(overseer_sock);  /* Close the overseer socket */
         exit(EXIT_FAILURE);
     }
-
-    printf("Initialisation message sent to overseer\n"); // debug message
  
-    // Main loop
+    /* Main Loop */
     while (1) {
-        char buffer[BUFFER_SIZE];  // Buffer for incoming data.
-        memset(buffer, 0, BUFFER_SIZE); // Clearing the buffer
+        char buffer[BUFFER_SIZE];       /* Buffer for incoming data */
+        memset(buffer, 0, BUFFER_SIZE); /* Clear the buffer */
 
-        struct sockaddr_in remote_addr; // Address structure for the remote sender.
-        socklen_t addr_len = sizeof(remote_addr); // Variable for address length.
+        struct sockaddr_in remote_addr;             /* Address the structure for the sender */
+        socklen_t addr_len = sizeof(remote_addr);   /* Address length */
 
-        // Receiving a datagram
+        /* Receiving a datagram */
         ssize_t rec_size = recvfrom(udp_sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&remote_addr, &addr_len);
         if (rec_size < 0) {
             perror("recvfrom() failed");
             continue; 
         }  
         
+        /* Check if data is received */
         else if (rec_size == 0) {
-            // This block will handle the scenario where no data is received.
             printf("No data received.\n");
             continue; 
         }
 
-
+        /* Received bytes in the buffer */
         door_datagram *door_data = (door_datagram *)buffer;
-        // Check if it's a DOOR datagram
-        if (memcmp(door_data->header, "DOOR", 4) == 0) { // Check for the correct header
-            printf("Received DOOR datagram. Sending confirmation\n"); //debug message 
-
-            // Construct the DREG (confirmation) message
+        /* Check if its the door datagram */
+        if (memcmp(door_data->header, "DOOR", 4) == 0) { 
             door_confirmation confirmation;
-            memcpy(confirmation.header, "DREG", 4); // Copy 'DREG' to the header
-            confirmation.door_addr = door_data->door_addr; // Copying the door IP
-            confirmation.door_port = door_data->door_port; // Copying the door port
+            memcpy(confirmation.header, "DREG", 4);         /* Copy the DREG to the header */
+            confirmation.door_addr = door_data->door_addr;  /* Copy the Door IP and port */
+            confirmation.door_port = door_data->door_port; 
 
-            // Send DREG to the overseer
+            /* Send the DREG through the UDP*/
             ssize_t sent_size = sendto(udp_sockfd, &confirmation, sizeof(confirmation), 0, 
                                         (struct sockaddr*)&overseer_addr, sizeof(overseer_addr));
             if (sent_size < 0) {
                 perror("sendto(overseer) failed");
                 continue; 
             }
-            printf("Sent DREG confirmation to overseer.\n"); //debug message 
-
         } 
         
-        // Check if it's a FIRE datagram
-        else if (memcmp(buffer, "FIRE", 4) == 0) { // Check for the correct header
-            if (!fire_alarm_triggered) {  // Proceed only if the alarm has not already been triggered
-                printf("Received FIRE datagram. Activating alarm...\n");
-                
-                // Set the flag so this block won't execute again unnecessarily
-                fire_alarm_triggered = 1;
+        
+        /* Check if it's a FIRE datagram */
+        else if (memcmp(buffer, "FIRE", 4) == 0) { 
+            if (!fire_alarm_triggered) {        /* Proceed only if the alarm has not already been triggered */               
+                fire_alarm_triggered = 1;       /* Set the flag so this block won't execute again unnecessarily */
 
-                printf("Received FIRE datagram. Activating alarm...\n");
-
-                // Lock the mutex before modifying the shared data
+                /* Lock the mutex before modifying the shared data */
                 pthread_mutex_lock(&(shared->mutex));
 
-                // Set 'alarm' to 'A'
+                /* Set 'alarm' to 'A' */
                 shared->alarm = 'A';
 
-                // Unlock the mutex
+                /* Unlock the mutex */
                 pthread_mutex_unlock(&(shared->mutex));
 
-                // Signal the condition variable 
+                /* Signal the condition variable */
                 pthread_cond_signal(&(shared->cond));
 
-                // Communicate with each registered door
+                /* Communicate with each registered door */
                 for (int i = 0; i < door_count; ++i) {
                     struct sockaddr_in door_addr;
                     memset(&door_addr, 0, sizeof(door_addr));
@@ -281,14 +261,14 @@ int main(int argc, char **argv) {
                     door_addr.sin_addr = door_addresses[i];
                     door_addr.sin_port = door_ports[i];
 
-                    // Create a new socket for TCP connection
+                    /* Create a new socket for TCP connection */
                     int door_sock = socket(AF_INET, SOCK_STREAM, 0);
                     if (door_sock < 0) {
                         perror("Cannot create socket");
-                        continue;  // If a socket fails, continue to try the others
+                        continue;  /* If a socket fails, continue to try the others */
                     }
 
-                    // Connect to the door
+                    /**/
                     if (connect(door_sock, (struct sockaddr*)&door_addr, sizeof(door_addr)) < 0) {
                         perror("Connection to door failed");
                         close(door_sock);
@@ -306,10 +286,6 @@ int main(int argc, char **argv) {
                     close(door_sock);
                 }
 
-                printf("Alarm activated, all doors notified.\n");
-            
-            
-                // New inner loop after handling the fire situation.
                 while (fire_alarm_triggered) {  // Loop to keep checking for DOOR registration.
                     char door_buffer[BUFFER_SIZE];
                     memset(door_buffer, 0, BUFFER_SIZE);
@@ -327,8 +303,6 @@ int main(int argc, char **argv) {
 
                     // Check if it's a DOOR datagram
                     if (memcmp(door_buffer, "DOOR", 4) == 0) {
-                        printf("Received DOOR registration datagram during fire alarm. Sending OPEN_EMERG#...\n");
-
                         // Extracting door information from the received datagram.
                         door_datagram *new_door_data = (door_datagram *)door_buffer;
 
@@ -371,22 +345,100 @@ int main(int argc, char **argv) {
                             perror("sendto(overseer) failed");
                             continue;
                         }
-                    } 
-                    
-                    else {
-                        printf("Received unknown datagram. Ignoring.\n");
                     }
+
                 }
-                
-                else {
-                    printf("Fire alarm already triggered. Ignoring repeated alert.\n");
+            }
+            else { 
+                printf("Fire alarm already triggered. Ignoring repeated alert.\n");
+            }
+        }
+      
+        else if (memcmp(buffer, "TEMP", 4) == 0) {
+            // Parse the datagram content
+            struct datagram_format *temp_datagram = (struct datagram_format *)buffer;
+            
+            // Check if the temperature is above the threshold and the data is recent
+            if (temp_datagram->temperature >= temp_threshold) {
+                // Get current time
+                struct timeval current_time;
+                gettimeofday(&current_time, NULL);
+                long long current_timestamp = (long long)current_time.tv_sec * 1000000 + current_time.tv_usec;
+
+                // Check the age of the detection
+                if ((current_timestamp - (long long)temp_datagram->timestamp.tv_sec * 1000000 - temp_datagram->timestamp.tv_usec) <= detection_period) {
+                    // Remove old detections
+                    int i = 0;
+                    while (i < detection_count) {
+                        if ((current_timestamp - detection_timestamps[i]) > detection_period) {
+                            // Remove the old detection by shifting the later entries forward
+                            for (int j = i; j < detection_count - 1; j++) {
+                                detection_timestamps[j] = detection_timestamps[j + 1];
+                            }
+                            detection_count--;
+                        } else {
+                            i++;
+                        }
+                    }
+
+                    // Add new detection timestamp
+                    if (detection_count < MAX_DETECTIONS) {
+                        detection_timestamps[detection_count++] = (long long)temp_datagram->timestamp.tv_sec * 1000000 + temp_datagram->timestamp.tv_usec;
+                    }
+
+                    // Check if sufficient detections are met to trigger an alarm
+                    if (detection_count >= min_detections) {
+                        // Lock the mutex before modifying the shared data
+                        pthread_mutex_lock(&(shared->mutex));
+
+                        // Set 'alarm' to 'A'
+                        shared->alarm = 'A';
+
+                        // Unlock the mutex
+                        pthread_mutex_unlock(&(shared->mutex));
+
+                        // Signal the condition variable 
+                        pthread_cond_signal(&(shared->cond));
+
+                        // Communicate with each registered door
+                        for (int i = 0; i < door_count; ++i) {
+                            struct sockaddr_in door_addr;
+                            memset(&door_addr, 0, sizeof(door_addr));
+                            door_addr.sin_family = AF_INET;
+                            door_addr.sin_addr = door_addresses[i];
+                            door_addr.sin_port = door_ports[i];
+
+                            // Create a new socket for TCP connection
+                            int door_sock = socket(AF_INET, SOCK_STREAM, 0);
+                            if (door_sock < 0) {
+                                perror("Cannot create socket");
+                                continue;  // If a socket fails, continue to try the others
+                            }
+
+                            // Connect to the door
+                            if (connect(door_sock, (struct sockaddr*)&door_addr, sizeof(door_addr)) < 0) {
+                                perror("Connection to door failed");
+                                close(door_sock);
+                                continue;  // If a connection fails, continue to try the others
+                            }
+
+                            // Send OPEN_EMERG# command to the door
+                            char command[] = "OPEN_EMERG#";
+                            ssize_t sent_bytes = send(door_sock, command, sizeof(command), 0);
+                            if (sent_bytes < 0) {
+                                perror("Failed to send command to door");
+                            }
+
+                            // Close the connection
+                            close(door_sock);
+                        }
+                    }
                 }
             }
         }
-        
-        munmap(shm, shm_stat.st_size);
-        close(udp_sockfd); // UDP socket for fire alarm system
-        close(overseer_sock); // TCP socket for communication with the overseer
-        return 0;  // Successful exit
     }
+    munmap(shm, shm_stat.st_size);
+    close(udp_sockfd); // UDP socket for fire alarm system
+    close(overseer_sock); // TCP socket for communication with the overseer
+    return 0;  // Successful exit
 }
