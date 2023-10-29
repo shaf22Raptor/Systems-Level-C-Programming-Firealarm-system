@@ -241,14 +241,17 @@ int main(int argc, char **argv)
             int received_address_count = receivedDatagram.address_count;
             struct addr_entry receivedEntries[50];
 
-            // 
+            // copy received entires into the new datagram that will be posted
             for (int i = 0; i < 50; i++)
             {
                 receivedEntries[i] = receivedDatagram.address_list[i];
             }
 
+            // Now add this sensor's details to the address list
+            // see if this list has 50 entries already.
             if (receivedEntries[49].sensor_addr.s_addr == 0 && receivedEntries[49].sensor_port == 0)
             {
+                // see which position this sensor should be placed in the list
                 for (int i = 0; i < 50; i++)
                 {
                     if (receivedEntries[i].sensor_addr.s_addr != 0 && receivedEntries[i].sensor_port != 0)
@@ -260,16 +263,19 @@ int main(int argc, char **argv)
                 }
             }
 
+            // if the list already has 50 entries then:
             else
             {
+                // shift every entry i - 1 places forward (first enrty will be replaced with second entry, 2nd with 3rd, etc)
                 for (int i = 0; i < 50; i++)
                 {
                     receivedEntries[i] = receivedEntries[i + 1];
                 }
+                // place this sensor's details in the last position of the address list
                 receivedEntries[49] = thisSensor;
             }
 
-            // create new datagram
+            // create new datagram and populate with all relevant data
             struct datagram_format passMessageOn;
             strcpy(passMessageOn.header, receivedHeader);
             passMessageOn.timestamp = receivedTimeStamp;
@@ -277,24 +283,28 @@ int main(int argc, char **argv)
             passMessageOn.id = receivedId;
             passMessageOn.address_count = received_address_count + 1;
 
-
+            // copy received addresses list to the list that will be posted to receivers
             for (int i = 0; i < 50; i++)
             {
                 passMessageOn.address_list[i] = receivedEntries[i];
             }
 
+            // check to see if the received address list already contains any of the receivers this sensor is supposed to send data to
             for (int i = 7; i < argc; i++)
             {
                 const char *address_port = argv[i];
                 const char *receiverPortString = strstr(address_port, ":");
                 int receiverPortNumber = atoi(receiverPortString + 1);
 
+                // use a search algorithm to find receiver addresses in the received address list
                 if (search(receivedEntries, receiverPortNumber, 50) == 1)
                 {
+                    // if addresses not found, then add receiver data to the address list
                     receiver_addr.sin_family = AF_INET;
                     receiver_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
                     receiver_addr.sin_port = htons(receiverPortNumber);
 
+                    // send to receiver
                     if (sendto(sockfd, &passMessageOn, sizeof(passMessageOn), 0, (struct sockaddr *)&receiver_addr, sizeof(receiver_addr)) == -1)
                     {
                         perror("sendto failed");
@@ -302,11 +312,13 @@ int main(int argc, char **argv)
                     }
                 }
             }
+            // clear message buffer
             receiveBuffer[n] = '\0';
             memset(receiveBuffer, 0, sizeof(receiveBuffer));
         }
 
         pthread_mutex_lock(&shared->mutex);
+        // use timedwait to allow shared memory to be updated
         pthread_cond_timedwait(&shared->cond, &shared->mutex, &condWait);
     }
 
@@ -341,6 +353,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
+// search function to see if address list contains a particular address
 int search(struct addr_entry entries[], int PortNumber, int numberEntries)
 {
     for (int i = 0; i < numberEntries; i++)
