@@ -225,7 +225,7 @@ int main(int argc, char **argv) {
             memcpy(confirmation.header, "DREG", 4);         /* Copy the DREG to the header */
             confirmation.door_addr = door_data->door_addr;  /* Copy the Door IP and port */
             confirmation.door_port = door_data->door_port; 
-
+            printf("Remote Address: %s:%d\n", inet_ntoa(remote_addr.sin_addr), ntohs(remote_addr.sin_port));
             /* Send the DREG through the UDP*/
             ssize_t sent_size = sendto(udp_sockfd, &confirmation, sizeof(confirmation), 0, 
                                         (struct sockaddr*)&overseer_addr, sizeof(overseer_addr));
