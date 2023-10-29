@@ -1,4 +1,12 @@
-/*pointers used on command line arguments and certain shared memory constructs*/
+/*
+ *This is the main executable file for the callpoint program, a safety-critical application. 
+ *Under normal operation, the program will constantly check its state as to whether or not it has been activated,
+ *when its state is '*' or '-' in shared memory with the simulator. 
+ *If its state is represented by '*', it will constantly send a udp datagram containing the message 'FIRE' to the 
+ *firealarm whose address:port is supplied as a command line argument.
+ *
+ *pointers used on command line arguments and certain shared memory constructs
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -23,9 +31,9 @@ struct shm_callpoint{
     pthread_cond_t cond;
 } ;
 
-/*Initialises udp connection to firealarm, and establishes shared memory with simulator, before entering infinite for loop*/
-/*For loop continuously checks if shared memory has triggered the fire callpoint.*/
-/*If callpoint is triggered, then it will continuously send the message "FIRE" to the supplied address of the firealarm*/
+/* Main loop of program. Sets up UDP connection with firealarm and shared memory system with simulator 
+ *before commencing normal operation.
+*/
 int main(int argc, char **argv) 
 {
     /*Initialise datagram that contains the message FIRE*/
