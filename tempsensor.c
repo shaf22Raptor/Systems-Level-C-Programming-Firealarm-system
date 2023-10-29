@@ -17,6 +17,7 @@
 
 struct timeval lastUpdateTime;
 
+// shared memory struct. This data will be shared with simulator.
 typedef struct
 {
     float temperature;
@@ -24,12 +25,14 @@ typedef struct
     pthread_cond_t cond;
 } shm_sensor;
 
+// Datagram format for each address entry that will be in datagram
 struct addr_entry
 {
     struct in_addr sensor_addr;
     in_port_t sensor_port;
 };
 
+// Datagram that will be sent by tempsensor with all necessary details
 struct datagram_format
 {
     char header[4]; // {'T', 'E', 'M', 'P'}
@@ -40,23 +43,28 @@ struct datagram_format
     struct addr_entry address_list[50];
 };
 
+// used to search addr_entry array to see if a particular address is already in it
 int search(struct addr_entry entries[], int PortNumber, int numberEntries);
 void updateLastUpdateTime();
 int hasMaxWaitTimePassed(int maxUpdateWait);
 
 int main(int argc, char **argv)
 {
+    // Sees if enough command line arguments were supplied
     if (argc < 6)
     {
         fprintf(stderr, "usage: {id} {address:port} {max condvar wait (microseconds)} {max update wait (microseconds)} {shared memory path} {shared memory offset} {receiver address:port}...");
         exit(1);
     }
 
+    // declare all addresses to be used in system
     struct sockaddr_in sensor_addr, receiver_addr, client_addr;
 
-    struct datagram_format datagram, receivedDatagram;
+    // declare all types of datagrams to be sent
+    struct datagram_format datagram, receivedDatagram, passMessageOn;
     socklen_t addr_size;
 
+    // Configure buffer for receiving data
     char receiveBuffer[MAX_BUFFER_SIZE];
 
     // intialise parameters for system
@@ -67,14 +75,17 @@ int main(int argc, char **argv)
     const char *shm_path = argv[5];
     off_t shm_offset = (off_t)atoi(argv[6]);
 
+    // Isolate port number from address number
     const char *portString = strstr(tempsensor_addr, ":");
     int portNumber = atoi(portString + 1);
 
+    // configure initial UDP packet
     struct timespec condWait;
     condWait.tv_sec = 0;
     condWait.tv_nsec = 0;
     condWait.tv_sec += max_wait_condvar / 1000000;
     condWait.tv_nsec += (max_wait_condvar % 1000000) * 1000;
+
     // Shared memory
     //  initialise shm
     int shm_fd = shm_open(shm_path, O_RDWR, 0);
@@ -88,16 +99,14 @@ int main(int argc, char **argv)
 
     // Obtain statistics related to shm. Intended to find size of shm.
     struct stat shm_stat;
-
     if (fstat(shm_fd, &shm_stat) == -1)
     {
         perror("fstat()");
         exit(1);
     }
 
-    // mmap
+    // mmap with error checking
     char *shm = mmap(NULL, shm_stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-
     if (shm == MAP_FAILED)
     {
         perror("mmap()");
@@ -115,6 +124,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    // configure connection for sensor to act as server for other sensors in system
     memset(&sensor_addr, '\0', sizeof(sensor_addr));
     sensor_addr.sin_family = AF_INET;
     sensor_addr.sin_port = htons(portNumber);
@@ -127,6 +137,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // Set socket to non-blocking
     int flags = fcntl(sockfd, F_GETFL, 0);
     fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 
@@ -146,8 +157,10 @@ int main(int argc, char **argv)
     int firstIteration = 1; // see if this is first iteration of for loop. 1 for true, 0 for false
     for (;;)
     {
+        // update temperature reading 
         currentTemp = shared->temperature;
         pthread_mutex_unlock(&shared->mutex);
+        // send new datagram if temperature changes, if this is the first iteration of the for loop, or if max delay for info update has passed
         if (currentTemp != oldTemp || firstIteration == 1 || hasMaxWaitTimePassed(max_wait_update) == 1)
         {
             firstIteration = 0;
@@ -172,7 +185,6 @@ int main(int argc, char **argv)
             datagram.address_count = 1;
 
             // list of addresses. It should only contain this sensor
-
             // Add this sensor's details to the list
             datagram.address_list[0] = thisSensor;
 
@@ -192,31 +204,44 @@ int main(int argc, char **argv)
                     perror("sendto failed");
                     exit(1);
                 }
+                // update time since the datagram was last sent to receivers
                 updateLastUpdateTime();
             }
         }
+        // configure size of address for receiving
         addr_size = sizeof(client_addr);
         while (1)
         {
+            // receive data from other devices in network
             int n = recvfrom(sockfd, &receiveBuffer, MAX_BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *)&client_addr, &addr_size);
+            // if no datagrams received, exit while loop
             if (n <= 0)
             {
                 break;
             }
-            int position;
+
+            // copy received data into a new datagram struct instance
             memcpy(&receivedDatagram, &receiveBuffer, sizeof(receivedDatagram));
+
+            // copy header from received datagram
             char receivedHeader[4];
             strcpy(receivedHeader, receivedDatagram.header);
 
+            // copy timestamp from received datagram
             struct timeval receivedTimeStamp;
             receivedTimeStamp = receivedDatagram.timestamp;
 
+            // copy temperature from datagram
             float receivedTemperature = receivedDatagram.temperature;
 
+            // copy ID from received datagram
             int receivedId = receivedDatagram.id;
+
+            // copy addresses and address count into new datagram
             int received_address_count = receivedDatagram.address_count;
             struct addr_entry receivedEntries[50];
 
+            // 
             for (int i = 0; i < 50; i++)
             {
                 receivedEntries[i] = receivedDatagram.address_list[i];
@@ -251,6 +276,8 @@ int main(int argc, char **argv)
             passMessageOn.temperature = receivedTemperature;
             passMessageOn.id = receivedId;
             passMessageOn.address_count = received_address_count + 1;
+
+
             for (int i = 0; i < 50; i++)
             {
                 passMessageOn.address_list[i] = receivedEntries[i];

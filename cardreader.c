@@ -187,6 +187,7 @@ int main(int argc, char **argv)
     if (munmap(shm, shm_stat.st_size) == -1) {
         perror("munmap()");
     }
+    // close shared memory
     close(shm_fd);
     return 0;
 }
