@@ -32,7 +32,7 @@ struct shm_callpoint{
 } ;
 
 /* Main loop of program. Sets up UDP connection with firealarm and shared memory system with simulator 
- *before commencing normal operation.
+ * before commencing normal operation.
 */
 int main(int argc, char **argv) 
 {
